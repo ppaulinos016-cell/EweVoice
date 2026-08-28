@@ -158,3 +158,42 @@ select {
         font-size: 24px;
     }
 }
+.subtitle-row {
+    display: grid;
+    grid-template-columns: 45px 150px 1fr;
+    gap: 10px;
+    align-items: start;
+    padding: 12px 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.subtitle-row:last-child {
+    border-bottom: none;
+}
+
+.subtitle-time {
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.subtitle-dialogue {
+    font-size: 17px;
+    font-weight: 500;
+    color: #111827;
+    text-align: left;
+}
+
+@media (max-width: 600px) {
+
+    .subtitle-row {
+        grid-template-columns: 35px 1fr;
+    }
+
+    .subtitle-time {
+        grid-column: 2;
+    }
+
+    .subtitle-dialogue {
+        grid-column: 2;
+    }
+}
