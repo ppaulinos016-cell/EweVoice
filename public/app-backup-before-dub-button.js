@@ -410,122 +410,28 @@ processButton.addEventListener(
     "click",
     async () => {
 
-        if (!selectedVideo) {
+        /*
+         * Si des sous-titres existent déjà,
+         * on les conserve.
+         */
+
+        if (
+            selectedSubtitles.length > 0
+        ) {
+
             status.textContent =
-                "⚠️ Sélectionnez une vidéo.";
+                `✅ ${selectedSubtitles.length} dialogues prêts pour la traduction Anglais → Éwé.`;
+
             return;
-        }
-
-        processButton.disabled = true;
-
-        try {
-
-            status.textContent =
-                "🎬 Préparation du doublage Éwé...";
-
-            const formData = new FormData();
-
-            formData.append(
-                "video",
-                selectedVideo
-            );
-
-            if (generatedSRT) {
-                formData.append(
-                    "srt",
-                    new Blob(
-                        [generatedSRT],
-                        { type: "text/plain" }
-                    ),
-                    "english.srt"
-                );
-            }
-
-            status.textContent =
-                "🧠 Traduction Anglais → Éwé...";
-
-            const response = await fetch(
-                "/api/dub-video",
-                {
-                    method: "POST",
-                    body: formData
-                }
-            );
-
-            const data =
-                await response.json();
-
-            if (!response.ok || !data.success) {
-                throw new Error(
-                    data.error ||
-                    "Le doublage a échoué."
-                );
-            }
-
-            status.textContent =
-                "🇹🇬 Génération de la voix Éwé terminée.";
-
-            if (data.videoUrl) {
-
-                const oldVideo =
-                    videoContainer.querySelector("video");
-
-                if (oldVideo) {
-                    oldVideo.pause();
-                }
-
-                videoContainer.innerHTML = "";
-
-                const finalVideo =
-                    document.createElement("video");
-
-                finalVideo.controls = true;
-                finalVideo.preload = "metadata";
-                finalVideo.src = data.videoUrl;
-
-                videoContainer.appendChild(
-                    finalVideo
-                );
-
-                const download =
-                    document.createElement("a");
-
-                download.href =
-                    data.videoUrl;
-
-                download.download =
-                    data.filename ||
-                    "ewevoice-video-ewe.mp4";
-
-                download.textContent =
-                    "⬇️ Télécharger la vidéo doublée en Éwé";
-
-                download.style.display =
-                    "inline-block";
-
-                download.style.marginTop =
-                    "15px";
-
-                subtitleText.parentElement.appendChild(
-                    download
-                );
-            }
-
-            status.textContent =
-                "✅ Doublage Éwé terminé ! La vidéo finale est prête.";
-
-        } catch (error) {
-
-            console.error(error);
-
-            status.textContent =
-                `❌ ${error.message}`;
-
-        } finally {
-
-            processButton.disabled = false;
 
         }
+
+
+        /*
+         * Sinon, transcription automatique.
+         */
+
+        await transcribeVideo();
 
     }
 );
