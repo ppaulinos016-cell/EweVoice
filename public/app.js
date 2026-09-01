@@ -1,39 +1,27 @@
 ﻿const videoInput = document.getElementById("videoInput");
-const subtitleInput = document.getElementById("subtitleInput");
-
 const videoContainer = document.getElementById("videoContainer");
 const videoInfo = document.getElementById("videoInfo");
-
-const subtitleStatus = document.getElementById("subtitleStatus");
-const subtitleText = document.getElementById("subtitleText");
-
 const processButton = document.getElementById("processButton");
 const status = document.getElementById("status");
-
 const voiceType = document.getElementById("voiceType");
+const targetLanguage = document.getElementById("targetLanguage");
+const resultSection = document.getElementById("resultSection");
+const resultVideo = document.getElementById("resultVideo");
+const downloadButton = document.getElementById("downloadButton");
 
 let selectedVideo = null;
-let selectedSubtitles = [];
-let generatedSRT = "";
-
-
-/* =====================================================
-   VIDÉO
-===================================================== */
 
 videoInput.addEventListener("change", () => {
 
     const file = videoInput.files[0];
 
     if (!file) {
+        selectedVideo = null;
+        processButton.disabled = true;
         return;
     }
 
     selectedVideo = file;
-    selectedSubtitles = [];
-    generatedSRT = "";
-
-    const videoURL = URL.createObjectURL(file);
 
     videoContainer.innerHTML = "";
 
@@ -41,344 +29,193 @@ videoInput.addEventListener("change", () => {
 
     video.controls = true;
     video.preload = "metadata";
-    video.src = videoURL;
+    video.playsInline = true;
+    video.src = URL.createObjectURL(file);
 
     videoContainer.appendChild(video);
 
     videoInfo.textContent =
-        `Vidéo : ${file.name} — ${formatFileSize(file.size)}`;
+        `Vidéo sélectionnée : ${file.name}`;
 
-    subtitleStatus.textContent =
-        "Aucun sous-titre automatique pour le moment.";
+    status.innerHTML = `
+        <div class="progress-wrapper">
+            <div class="progress-title">✅ Vidéo prête</div>
+            <div class="progress-text">
+                Choisissez la langue et la voix, puis lancez la traduction.
+            </div>
+        </div>
+    `;
 
-    subtitleText.textContent =
-        "Vous pouvez fournir un fichier SRT/VTT ou laisser EweVoice détecter automatiquement les dialogues.";
+    processButton.disabled = false;
 
-    status.textContent =
-        "✅ Vidéo chargée. Prête pour la transcription.";
-
-    updateProcessButton();
+    if (resultSection) {
+        resultSection.style.display = "none";
+    }
 });
 
 
-/* =====================================================
-   SOUS-TITRES SRT / VTT
-===================================================== */
+function afficherProgression(etape, titre, message, pourcentage) {
 
-subtitleInput.addEventListener("change", async () => {
+    status.innerHTML = `
 
-    const file = subtitleInput.files[0];
+        <div class="progress-wrapper">
 
-    if (!file) {
-        return;
-    }
+            <div class="progress-header">
+                <strong>${etape}</strong>
+                <span>${pourcentage}%</span>
+            </div>
 
-    subtitleStatus.textContent =
-        `Lecture du fichier : ${file.name}`;
+            <div class="progress-bar">
+                <div
+                    class="progress-fill"
+                    style="width:${pourcentage}%"
+                ></div>
+            </div>
 
-    try {
+            <div class="progress-title">
+                ${titre}
+            </div>
 
-        const content = await file.text();
+            <div class="progress-text">
+                ${message}
+            </div>
 
-        const extension =
-            file.name.toLowerCase().split(".").pop();
-
-        if (extension === "srt") {
-
-            selectedSubtitles = parseSRT(content);
-
-        } else if (extension === "vtt") {
-
-            selectedSubtitles = parseVTT(content);
-
-        } else {
-
-            throw new Error(
-                "Format de sous-titres non reconnu."
-            );
-
-        }
-
-        generatedSRT = content;
-
-        displaySubtitles(selectedSubtitles);
-
-        subtitleStatus.textContent =
-            `✅ ${selectedSubtitles.length} sous-titres détectés.`;
-
-        status.textContent =
-            "✅ Sous-titres anglais chargés.";
-
-        updateProcessButton();
-
-    } catch (error) {
-
-        console.error(error);
-
-        subtitleStatus.textContent =
-            "❌ Impossible de lire les sous-titres.";
-
-        subtitleText.textContent =
-            "Vérifiez que le fichier est bien au format SRT ou VTT.";
-
-    }
-
-});
-
-
-/* =====================================================
-   SRT
-===================================================== */
-
-function parseSRT(content) {
-
-    const blocks = content
-        .replace(/\r/g, "")
-        .trim()
-        .split(/\n\s*\n/);
-
-    const subtitles = [];
-
-    for (const block of blocks) {
-
-        const lines = block.split("\n");
-
-        if (lines.length < 2) {
-            continue;
-        }
-
-        let timeLineIndex = 0;
-
-        if (/^\d+$/.test(lines[0].trim())) {
-            timeLineIndex = 1;
-        }
-
-        const timeLine = lines[timeLineIndex];
-
-        if (!timeLine || !timeLine.includes("-->")) {
-            continue;
-        }
-
-        const times = timeLine.split("-->");
-
-        const start = times[0].trim();
-        const end = times[1].trim();
-
-        const text = lines
-            .slice(timeLineIndex + 1)
-            .join(" ")
-            .replace(/<[^>]*>/g, "")
-            .trim();
-
-        if (!text) {
-            continue;
-        }
-
-        subtitles.push({
-            start,
-            end,
-            text
-        });
-    }
-
-    return subtitles;
+        </div>
+    `;
 }
 
 
-/* =====================================================
-   VTT
-===================================================== */
-
-function parseVTT(content) {
-
-    const blocks = content
-        .replace(/\r/g, "")
-        .trim()
-        .split(/\n\s*\n/);
-
-    const subtitles = [];
-
-    for (const block of blocks) {
-
-        const lines = block.split("\n");
-
-        const timeLineIndex =
-            lines.findIndex(
-                line => line.includes("-->")
-            );
-
-        if (timeLineIndex === -1) {
-            continue;
-        }
-
-        const timeLine =
-            lines[timeLineIndex];
-
-        const times =
-            timeLine.split("-->");
-
-        const start =
-            times[0].trim();
-
-        const end =
-            times[1].trim();
-
-        const text =
-            lines
-                .slice(timeLineIndex + 1)
-                .join(" ")
-                .replace(/<[^>]*>/g, "")
-                .trim();
-
-        if (!text) {
-            continue;
-        }
-
-        subtitles.push({
-            start,
-            end,
-            text
-        });
-    }
-
-    return subtitles;
-}
-
-
-/* =====================================================
-   AFFICHAGE
-===================================================== */
-
-function displaySubtitles(subtitles) {
-
-    subtitleText.innerHTML = "";
-
-    if (subtitles.length === 0) {
-
-        subtitleText.textContent =
-            "Aucun dialogue trouvé.";
-
-        return;
-    }
-
-    subtitles.forEach((subtitle, index) => {
-
-        const row =
-            document.createElement("div");
-
-        row.className =
-            "subtitle-row";
-
-        row.innerHTML = `
-            <strong>${index + 1}.</strong>
-
-            <span class="subtitle-time">
-                ${escapeHTML(subtitle.start)}
-                →
-                ${escapeHTML(subtitle.end)}
-            </span>
-
-            <span class="subtitle-dialogue">
-                ${escapeHTML(subtitle.text)}
-            </span>
-        `;
-
-        subtitleText.appendChild(row);
-
-    });
-
-}
-
-
-/* =====================================================
-   TRANSCRIPTION AUTOMATIQUE
-===================================================== */
-
-async function transcribeVideo() {
+processButton.addEventListener("click", async () => {
 
     if (!selectedVideo) {
-
         status.textContent =
             "⚠️ Sélectionnez une vidéo.";
-
         return;
-
     }
-
 
     processButton.disabled = true;
 
-    status.textContent =
-        "📤 Envoi de la vidéo à EweVoice...";
+    const selectedVoice =
+        voiceType?.value || "adult";
+
+    const selectedLanguage =
+        targetLanguage?.value || "fr";
+
+    const formData = new FormData();
+
+    formData.append("video", selectedVideo);
+    formData.append("voice", selectedVoice);
+    formData.append("targetLanguage", selectedLanguage);
 
 
-    const formData =
-        new FormData();
-
-    formData.append(
-        "video",
-        selectedVideo
+    afficherProgression(
+        "1/4",
+        "🧠 Analyse de la vidéo",
+        "Extraction de la piste audio et transcription de la parole...",
+        25
     );
 
 
     try {
 
-        status.textContent =
-            "🎧 Extraction de l'audio...";
-
-
-        const response =
-            await fetch(
-                "/api/transcribe",
-                {
-                    method: "POST",
-                    body: formData
-                }
-            );
-
-
-        status.textContent =
-            "🧠 Whisper analyse les dialogues anglais...";
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok || !data.success) {
-
-            throw new Error(
-                data.error ||
-                "La transcription a échoué."
-            );
-
-        }
-
-
-        generatedSRT =
-            data.subtitles || "";
-
-
-        selectedSubtitles =
-            parseSRT(generatedSRT);
-
-
-        displaySubtitles(
-            selectedSubtitles
+        const response = await fetch(
+            "/api/dub-video",
+            {
+                method: "POST",
+                body: formData
+            }
         );
 
 
-        subtitleStatus.textContent =
-            `✅ ${selectedSubtitles.length} dialogues anglais détectés automatiquement.`;
+        if (!response.ok) {
+
+            let errorMessage =
+                "La traduction a échoué.";
+
+            try {
+
+                const errorData =
+                    await response.json();
+
+                errorMessage =
+                    errorData.error || errorMessage;
+
+            } catch (_) {}
+
+            throw new Error(errorMessage);
+        }
 
 
-        status.textContent =
-            "✅ Transcription anglaise terminée. Les dialogues sont prêts pour la traduction Éwé.";
+        /*
+         * Le serveur effectue actuellement
+         * les différentes opérations avant
+         * de retourner le résultat final.
+         *
+         * L'interface présente donc les étapes
+         * pendant le traitement de la réponse.
+         */
+
+        afficherProgression(
+            "2/4",
+            "🌍 Traduction",
+            `Traduction automatique vers ${
+                selectedLanguage === "fr"
+                    ? "le français"
+                    : "l'éwé"
+            }...`,
+            50
+        );
 
 
-        addDownloadButton(
-            generatedSRT,
-            data.filename
+        const data = await response.json();
+
+
+        if (!data.success) {
+
+            throw new Error(
+                data.error ||
+                "La traduction a échoué."
+            );
+        }
+
+
+        afficherProgression(
+            "3/4",
+            "🎙️ Génération de la voix",
+            "Création de la nouvelle piste audio avec la voix sélectionnée...",
+            75
+        );
+
+
+        await new Promise(
+            resolve => setTimeout(resolve, 500)
+        );
+
+
+        afficherProgression(
+            "4/4",
+            "🎬 Création de la vidéo finale",
+            "Remplacement de l'audio original et finalisation de la vidéo...",
+            90
+        );
+
+
+        if (!data.video) {
+
+            throw new Error(
+                "La vidéo finale n'a pas été retournée par le serveur."
+            );
+        }
+
+
+        afficherResultat(data.video);
+
+
+        afficherProgression(
+            "✓",
+            "🎉 Traduction terminée",
+            "La vidéo est prête. Vous pouvez maintenant la regarder ou la télécharger.",
+            100
         );
 
 
@@ -386,334 +223,46 @@ async function transcribeVideo() {
 
         console.error(error);
 
-        status.textContent =
-            `❌ ${error.message}`;
-
-        subtitleStatus.textContent =
-            "❌ La transcription automatique a échoué.";
+        status.innerHTML = `
+            <div class="error-message">
+                ❌ ${error.message}
+            </div>
+        `;
 
     } finally {
 
-        processButton.disabled =
-            false;
+        processButton.disabled = false;
 
     }
 
-}
+});
 
 
-/* =====================================================
-   BOUTON DOUBLAGE
-===================================================== */
+function afficherResultat(videoURL) {
 
-processButton.addEventListener(
-    "click",
-    async () => {
+    if (!resultSection ||
+        !resultVideo ||
+        !downloadButton) {
 
-        if (!selectedVideo) {
-            status.textContent =
-                "⚠️ Sélectionnez une vidéo.";
-            return;
-        }
-
-        processButton.disabled = true;
-
-        try {
-
-            status.textContent =
-                "🎬 Préparation du doublage Éwé...";
-
-            const formData = new FormData();
-
-            formData.append(
-                "video",
-                selectedVideo
-            );
-
-            if (generatedSRT) {
-                formData.append(
-                    "srt",
-                    new Blob(
-                        [generatedSRT],
-                        { type: "text/plain" }
-                    ),
-                    "english.srt"
-                );
-            }
-
-            status.textContent =
-                "🧠 Traduction Anglais → Éwé...";
-
-            const response = await fetch(
-                "/api/dub-video",
-                {
-                    method: "POST",
-                    body: formData
-                }
-            );
-
-            const data =
-                await response.json();
-
-            if (!response.ok || !data.success) {
-                throw new Error(
-                    data.error ||
-                    "Le doublage a échoué."
-                );
-            }
-
-            status.textContent =
-                "🇹🇬 Génération de la voix Éwé terminée.";
-
-            if (data.videoUrl) {
-
-                const oldVideo =
-                    videoContainer.querySelector("video");
-
-                if (oldVideo) {
-                    oldVideo.pause();
-                }
-
-                videoContainer.innerHTML = "";
-
-                const finalVideo =
-                    document.createElement("video");
-
-                finalVideo.controls = true;
-                finalVideo.preload = "metadata";
-                finalVideo.src = data.videoUrl;
-
-                videoContainer.appendChild(
-                    finalVideo
-                );
-
-                const download =
-                    document.createElement("a");
-
-                download.href =
-                    data.videoUrl;
-
-                download.download =
-                    data.filename ||
-                    "ewevoice-video-ewe.mp4";
-
-                download.textContent =
-                    "⬇️ Télécharger la vidéo doublée en Éwé";
-
-                download.style.display =
-                    "inline-block";
-
-                download.style.marginTop =
-                    "15px";
-
-                subtitleText.parentElement.appendChild(
-                    download
-                );
-            }
-
-            status.textContent =
-                "✅ Doublage Éwé terminé ! La vidéo finale est prête.";
-
-        } catch (error) {
-
-            console.error(error);
-
-            status.textContent =
-                `❌ ${error.message}`;
-
-        } finally {
-
-            processButton.disabled = false;
-
-        }
-
-    }
-);
-
-
-/* =====================================================
-   BOUTON TÉLÉCHARGEMENT SRT
-===================================================== */
-
-function addDownloadButton(
-    content,
-    filename
-) {
-
-    const oldButton =
-        document.getElementById(
-            "downloadSRT"
-        );
-
-    if (oldButton) {
-        oldButton.remove();
+        return;
     }
 
 
-    const button =
-        document.createElement("button");
-
-    button.id =
-        "downloadSRT";
-
-    button.textContent =
-        "💾 Télécharger les sous-titres anglais";
+    resultSection.style.display = "block";
 
 
-    button.style.marginTop =
-        "15px";
+    resultVideo.src = videoURL;
 
 
-    button.addEventListener(
-        "click",
-        () => {
+    downloadButton.href = videoURL;
 
-            const blob =
-                new Blob(
-                    [content],
-                    {
-                        type:
-                            "text/plain;charset=utf-8"
-                    }
-                );
+    downloadButton.download =
+        "EweVoice-video-traduite.mp4";
 
 
-            const url =
-                URL.createObjectURL(blob);
-
-
-            const link =
-                document.createElement("a");
-
-
-            link.href =
-                url;
-
-
-            link.download =
-                filename ||
-                "ewevoice-anglais.srt";
-
-
-            document.body.appendChild(
-                link
-            );
-
-
-            link.click();
-
-
-            link.remove();
-
-
-            URL.revokeObjectURL(
-                url
-            );
-
-        }
-    );
-
-
-    subtitleText.parentElement.appendChild(
-        button
-    );
-
-}
-
-
-/* =====================================================
-   VOIX
-===================================================== */
-
-voiceType.addEventListener(
-    "change",
-    () => {
-
-        const selected =
-            voiceType
-                .options[
-                    voiceType.selectedIndex
-                ]
-                .text;
-
-        status.textContent =
-            `Voix sélectionnée : ${selected}`;
-
-    }
-);
-
-
-/* =====================================================
-   BOUTON
-===================================================== */
-
-function updateProcessButton() {
-
-    processButton.disabled =
-        !selectedVideo;
-
-}
-
-
-/* =====================================================
-   TAILLE
-===================================================== */
-
-function formatFileSize(bytes) {
-
-    if (bytes < 1024) {
-
-        return `${bytes} octets`;
-
-    }
-
-    if (bytes < 1024 * 1024) {
-
-        return `${(
-            bytes / 1024
-        ).toFixed(1)} Ko`;
-
-    }
-
-    return `${(
-        bytes /
-        (1024 * 1024)
-    ).toFixed(1)} Mo`;
-
-}
-
-
-/* =====================================================
-   SÉCURITÉ HTML
-===================================================== */
-
-function escapeHTML(text) {
-
-    return String(text)
-
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-
-        .replace(
-            /</g,
-            "&lt;"
-        )
-
-        .replace(
-            />/g,
-            "&gt;"
-        )
-
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-
-        .replace(
-            /'/g,
-            "&#039;"
-        );
+    resultSection.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+    });
 
 }
