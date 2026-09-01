@@ -9,16 +9,14 @@ const app = express();
 const PORT = 3000;
 
 const ROOT = __dirname;
-const PYTHON_PATH = path.join(ROOT, ".venv", "Scripts", "python.exe");
+const PYTHON_PATH = process.platform === "win32" ? path.join(ROOT, ".venv", "Scripts", "python.exe") : "python3";
 const PUBLIC_DIR = path.join(ROOT, "public");
 const UPLOAD_DIR = path.join(ROOT, "uploads");
 const OUTPUT_DIR = path.join(ROOT, "outputs");
 const MODEL_DIR = path.join(ROOT, "models");
-const VENV_PYTHON = path.join(ROOT, ".venv", "Scripts", "python.exe");
+const VENV_PYTHON = process.platform === "win32" ? path.join(ROOT, ".venv", "Scripts", "python.exe") : "python3";
 
-const FFMPEG_PATH = process.env.FFMPEG_PATH || (process.platform === "win32"
-    ? "C:\\Users\\hp\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffmpeg.exe"
-    : "ffmpeg");
+const FFMPEG_PATH = process.env.FFMPEG_PATH || "ffmpeg";
 
 const WHISPER_MODEL =
     path.join(MODEL_DIR, "ggml-base.bin");
@@ -1021,6 +1019,9 @@ app.post(
 
     }
 );
+
+
+
 
 
 
