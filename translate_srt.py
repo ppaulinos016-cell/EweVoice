@@ -1,42 +1,75 @@
 ﻿import sys
-import json
+import re
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 MODEL_NAME = "facebook/nllb-200-distilled-600M"
 
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+def parse_srt(path):
+    text = open(path, "r", encoding="utf-8-sig").read()
+    blocks = re.split(r"\n\s*\n", text.strip())
+    results = []
 
-tokenizer.src_lang = "eng_Latn"
+    for block in blocks:
+        lines = block.splitlines()
+        if len(lines) < 3:
+            continue
 
-def translate(text):
-    inputs = tokenizer(
-        text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=512
+        parts = lines[1].split(" --> ")
+        if len(parts) != 2:
+            continue
+
+        results.append((parts[0], parts[1], " ".join(lines[2:]).strip()))
+
+    return results
+
+def main():
+    if len(sys.argv) < 4:
+        print("Usage: python translate_srt.py input.srt output.srt langue")
+        sys.exit(1)
+
+    input_srt, output_srt, target = sys.argv[1:4]
+
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+
+    tokenizer.src_lang = "eng_Latn"
+
+    target_id = tokenizer.convert_tokens_to_ids(
+        "fra_Latn" if target == "fr" else "ewe_Latn"
     )
 
-    translated = model.generate(
-        **inputs,
-        forced_bos_token_id=tokenizer.convert_tokens_to_ids("ewe_Latn"),
-        max_length=512
-    )
+    segments = parse_srt(input_srt)
+    output = []
 
-    return tokenizer.decode(
-        translated[0],
-        skip_special_tokens=True
-    )
+    for i, (start, end, text) in enumerate(segments, 1):
+        print(f"TRADUCTION {i}/{len(segments)}", flush=True)
 
-data = json.load(sys.stdin)
+        inputs = tokenizer(
+            text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512
+        )
 
-results = []
+        result = model.generate(
+            **inputs,
+            forced_bos_token_id=target_id,
+            max_length=512
+        )
 
-for item in data:
-    results.append({
-        "start": item["start"],
-        "end": item["end"],
-        "text": translate(item["text"])
-    })
+        translated = tokenizer.decode(
+            result[0],
+            skip_special_tokens=True
+        )
 
-print(json.dumps(results, ensure_ascii=False))
+        output.append(
+            f"{i}\n{start} --> {end}\n{translated}\n"
+        )
+
+    with open(output_srt, "w", encoding="utf-8") as f:
+        f.write("\n".join(output))
+
+    print("TRADUCTION TERMINEE", flush=True)
+
+if __name__ == "__main__":
+    main()

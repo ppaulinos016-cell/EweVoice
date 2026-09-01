@@ -9,6 +9,7 @@ const app = express();
 const PORT = 3000;
 
 const ROOT = __dirname;
+const PYTHON_PATH = path.join(ROOT, ".venv", "Scripts", "python.exe");
 const PUBLIC_DIR = path.join(ROOT, "public");
 const UPLOAD_DIR = path.join(ROOT, "uploads");
 const OUTPUT_DIR = path.join(ROOT, "outputs");
@@ -185,44 +186,67 @@ async function extractAudio(videoPath, audioPath) {
    WHISPER
 ========================================================= */
 
-async function transcribeAudio(audioPath, outputSrt) {
+function runPython(script, args = []) {
+    return new Promise((resolve, reject) => {
 
-    if (!fs.existsSync(WHISPER_MODEL)) {
-
-        throw new Error(
-            `Modèle Whisper introuvable : ${WHISPER_MODEL}`
+        const child = spawn(
+            PYTHON_PATH,
+            [path.join(ROOT, script), ...args],
+            { windowsHide: true }
         );
 
-    }
+        let stdout = "";
+        let stderr = "";
 
-    await runFFmpeg([
+        child.stdout.on("data", data => {
+            stdout += data.toString();
+            console.log(data.toString());
+        });
 
-        "-y",
+        child.stderr.on("data", data => {
+            stderr += data.toString();
+            console.error(data.toString());
+        });
 
-        "-i",
-        audioPath,
+        child.on("error", reject);
 
-        "-af",
+        child.on("close", code => {
 
-        `whisper=model='${WHISPER_MODEL.replace(/\\/g, "/")}':language=en:destination='${outputSrt.replace(/\\/g, "/")}':format=srt`,
+            if (code === 0) {
+                resolve({ stdout, stderr });
+            } else {
+                reject(
+                    new Error(
+                        `${script} a échoué avec le code ${code}\n${stderr}`
+                    )
+                );
+            }
 
-        "-f",
-        "null",
+        });
 
-        "NUL"
-
-    ]);
-
-    if (!fs.existsSync(outputSrt)) {
-
-        throw new Error(
-            "Whisper n'a pas généré le fichier SRT."
-        );
-
-    }
-
+    });
 }
 
+async function transcribeAudio(audioPath, outputSrt) {
+
+    console.log("Whisper Python : transcription en cours...");
+
+    await runPython(
+        "transcribe.py",
+        [
+            audioPath,
+            outputSrt
+        ]
+    );
+
+    if (!fs.existsSync(outputSrt)) {
+        throw new Error(
+            "Whisper Python n'a pas généré le fichier SRT."
+        );
+    }
+
+    console.log("Whisper Python : transcription terminée.");
+}
 
 /* =========================================================
    TRANSCRIPTION VIDÉO
@@ -996,4 +1020,13 @@ app.post(
 
     }
 );
+
+
+
+
+
+
+
+
+
 
