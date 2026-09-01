@@ -2,7 +2,7 @@
 import os
 import subprocess
 
-FFMPEG = r"C:\Users\hp\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-9.0.1-full_build\bin\ffmpeg.exe"
+FFMPEG = os.environ.get("FFMPEG_PATH", "ffmpeg")
 
 def main():
     if len(sys.argv) < 4:
@@ -52,3 +52,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

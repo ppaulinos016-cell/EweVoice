@@ -16,8 +16,9 @@ const OUTPUT_DIR = path.join(ROOT, "outputs");
 const MODEL_DIR = path.join(ROOT, "models");
 const VENV_PYTHON = path.join(ROOT, ".venv", "Scripts", "python.exe");
 
-const FFMPEG_PATH =
-    "C:\\Users\\hp\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffmpeg.exe";
+const FFMPEG_PATH = process.env.FFMPEG_PATH || (process.platform === "win32"
+    ? "C:\\Users\\hp\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffmpeg.exe"
+    : "ffmpeg");
 
 const WHISPER_MODEL =
     path.join(MODEL_DIR, "ggml-base.bin");
@@ -1020,6 +1021,7 @@ app.post(
 
     }
 );
+
 
 
 
