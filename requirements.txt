@@ -1,0 +1,7 @@
+﻿torch
+transformers
+numpy
+soundfile
+sentencepiece
+safetensors
+openai-whisper
