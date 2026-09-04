@@ -3,262 +3,995 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
-const { spawn } = require("child_process");
+const { spawn, execFile } = require("child_process");
+const readline = require("readline");
+const { startEweAudioTranslation } = require("./ewe-audio-route");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-const ROOT = __dirname;
-const PYTHON_PATH = process.platform === "win32" ? path.join(ROOT, ".venv", "Scripts", "python.exe") : "python3";
-const PUBLIC_DIR = path.join(ROOT, "public");
-const UPLOAD_DIR = path.join(ROOT, "uploads");
-const OUTPUT_DIR = path.join(ROOT, "outputs");
-const MODEL_DIR = path.join(ROOT, "models");
-const VENV_PYTHON = process.platform === "win32" ? path.join(ROOT, ".venv", "Scripts", "python.exe") : "python3";
+const PUBLIC_DIR = path.join(__dirname, "public");
+const UPLOAD_DIR = path.join(__dirname, "uploads");
+const OUTPUT_DIR = path.join(__dirname, "outputs");
 
-const FFMPEG_PATH = process.env.FFMPEG_PATH || "ffmpeg";
-
-const WHISPER_MODEL =
-    path.join(MODEL_DIR, "ggml-base.bin");
-
-const TRANSLATE_SCRIPT =
-    path.join(ROOT, "translate_srt.py");
-
-for (const directory of [
-    UPLOAD_DIR,
-    OUTPUT_DIR,
-    MODEL_DIR
-]) {
-    fs.mkdirSync(directory, { recursive: true });
+for (const dir of [UPLOAD_DIR, OUTPUT_DIR]) {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
 }
 
 app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ extended: true }));
+
 app.use(express.static(PUBLIC_DIR));
 app.use("/outputs", express.static(OUTPUT_DIR));
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, UPLOAD_DIR);
-    },
-
-    filename: (req, file, cb) => {
-        const extension = path.extname(file.originalname);
-        const randomName =
-            crypto.randomBytes(16).toString("hex");
-
-        cb(null, `${randomName}${extension}`);
-    }
-});
+app.use("/uploads", express.static(UPLOAD_DIR));
 
 const upload = multer({
-    storage,
-
-    limits: {
-        fileSize: 2 * 1024 * 1024 * 1024
-    },
-
-    fileFilter: (req, file, cb) => {
-
-        if (
-            file.mimetype &&
-            file.mimetype.startsWith("video/")
-        ) {
-            cb(null, true);
-        } else {
-            cb(
-                new Error(
-                    "Veuillez sélectionner un fichier vidéo."
-                )
-            );
-        }
-    }
+    dest: UPLOAD_DIR
 });
 
+const jobs = new Map();
 
-/* =========================================================
-   EXÉCUTER UN PROGRAMME
-========================================================= */
-
-function runProcess(command, args, options = {}) {
-
-    return new Promise((resolve, reject) => {
-
-        console.log("");
-        console.log("=================================");
-        console.log("PROCESSUS");
-        console.log("=================================");
-        console.log(command);
-        console.log(args.join(" "));
-
-        const child = spawn(
-            command,
-            args,
-            {
-                windowsHide: true,
-                ...options
-            }
-        );
-
-        let stdout = "";
-        let stderr = "";
-
-        child.stdout.on("data", data => {
-            stdout += data.toString();
-        });
-
-        child.stderr.on("data", data => {
-            stderr += data.toString();
-            console.log(data.toString());
-        });
-
-        child.on("error", error => {
-            reject(error);
-        });
-
-        child.on("close", code => {
-
-            if (code === 0) {
-
-                resolve({
-                    stdout,
-                    stderr
-                });
-
-            } else {
-
-                reject(
-                    new Error(
-                        `Processus terminé avec le code ${code}\n${stderr}`
-                    )
-                );
-
-            }
-
-        });
-
-    });
-
-}
-
-
-/* =========================================================
-   FFMPEG
-========================================================= */
-
-function runFFmpeg(args) {
-    return runProcess(FFMPEG_PATH, args);
-}
-
-
-/* =========================================================
-   EXTRACTION AUDIO
-========================================================= */
-
-async function extractAudio(videoPath, audioPath) {
-
-    await runFFmpeg([
-
-        "-y",
-
-        "-i",
-        videoPath,
-
-        "-vn",
-
-        "-ac",
-        "1",
-
-        "-ar",
-        "16000",
-
-        "-c:a",
-        "pcm_s16le",
-
-        audioPath
-
-    ]);
-
-}
-
-
-/* =========================================================
-   WHISPER
-========================================================= */
-
-function runPython(script, args = []) {
-    return new Promise((resolve, reject) => {
-
-        const child = spawn(
-            PYTHON_PATH,
-            [path.join(ROOT, script), ...args],
-            { windowsHide: true }
-        );
-
-        let stdout = "";
-        let stderr = "";
-
-        child.stdout.on("data", data => {
-            stdout += data.toString();
-            console.log(data.toString());
-        });
-
-        child.stderr.on("data", data => {
-            stderr += data.toString();
-            console.error(data.toString());
-        });
-
-        child.on("error", reject);
-
-        child.on("close", code => {
-
-            if (code === 0) {
-                resolve({ stdout, stderr });
-            } else {
-                reject(
-                    new Error(
-                        `${script} a échoué avec le code ${code}\n${stderr}`
-                    )
-                );
-            }
-
-        });
-
-    });
-}
-
-async function transcribeAudio(audioPath, outputSrt) {
-
-    console.log("Whisper Python : transcription en cours...");
-
-    await runPython(
-        "transcribe.py",
-        [
-            audioPath,
-            outputSrt
-        ]
-    );
-
-    if (!fs.existsSync(outputSrt)) {
-        throw new Error(
-            "Whisper Python n'a pas généré le fichier SRT."
-        );
+function pythonCommand() {
+    if (process.platform === "win32") {
+        return path.join(__dirname, ".venv", "Scripts", "python.exe");
     }
 
-    console.log("Whisper Python : transcription terminée.");
+    return path.join(__dirname, ".venv", "bin", "python");
 }
 
-/* =========================================================
-   TRANSCRIPTION VIDÉO
-========================================================= */
+function ffmpegExtractAudio(input, output, callback) {
+    execFile(
+        "ffmpeg",
+        [
+            "-y",
+            "-i", input,
+            "-vn",
+            "-ac", "1",
+            "-ar", "16000",
+            "-c:a", "pcm_s16le",
+            output
+        ],
+        callback
+    );
+}
+
+function ffmpegExtractPlayableAudio(input, output, callback) {
+    execFile(
+        "ffmpeg",
+        [
+            "-y",
+            "-i", input,
+            "-vn",
+            "-ac", "2",
+            "-ar", "44100",
+            "-b:a", "192k",
+            output
+        ],
+        callback
+    );
+}
+
+function parseTime(value) {
+    const parts = value.replace(",", ".").split(":");
+
+    return (
+        Number(parts[0]) * 3600 +
+        Number(parts[1]) * 60 +
+        Number(parts[2])
+    );
+}
+
+function parseSRT(srt) {
+    const blocks = srt.trim().split(/\r?\n\r?\n/);
+    const result = [];
+
+    for (const block of blocks) {
+        const lines = block.split(/\r?\n/);
+
+        if (lines.length < 3) {
+            continue;
+        }
+
+        const times = lines[1].split(/\s+-->\s+/);
+
+        if (times.length !== 2) {
+            continue;
+        }
+
+        result.push({
+            id: Number(lines[0]) || result.length + 1,
+            start: parseTime(times[0]),
+            end: parseTime(times[1]),
+            text: lines.slice(2).join(" ").trim()
+        });
+    }
+
+    return result;
+}
+
+/*
+ * ============================================================
+ * STATUS
+ * ============================================================
+ */
+
+app.get("/api/status", (req, res) => {
+    res.json({
+        success: true
+    });
+});
+
+/*
+ * ============================================================
+ * TRANSCRIPTION
+ * VIDEO -> AUDIO -> WHISPER
+ * ============================================================
+ */
+
+app.post("/api/transcribe", upload.single("video"), (req, res) => {
+
+    if (!req.file) {
+        return res.status(400).json({
+            success: false,
+            error: "Aucune vidéo reçue."
+        });
+    }
+
+    const sourceLanguage =
+        req.body.sourceLanguage || "eng_Latn";
+
+    const jobId = crypto.randomUUID();
+
+    const extension =
+        path.extname(req.file.originalname) || ".mp4";
+
+    const videoPath =
+        path.join(
+            UPLOAD_DIR,
+            `${jobId}${extension}`
+        );
+
+    const wavPath =
+        path.join(
+            UPLOAD_DIR,
+            `${jobId}.wav`
+        );
+
+    const audioPath =
+        path.join(
+            OUTPUT_DIR,
+            `${jobId}-audio.mp3`
+        );
+
+    fs.renameSync(
+        req.file.path,
+        videoPath
+    );
+
+    jobs.set(jobId, {
+        status: "processing",
+        progress: 5,
+        stage: "starting",
+        sourceLanguage,
+        subtitles: [],
+        audioUrl: null,
+        done: false,
+        error: null,
+        sourceVideoPath: videoPath,
+        sourceVideoUrl:
+            `/uploads/${path.basename(videoPath)}`
+    });
+
+    const job = jobs.get(jobId);
+
+    /*
+     * Extraction de l'audio jouable.
+     */
+    ffmpegExtractPlayableAudio(
+        videoPath,
+        audioPath,
+        (audioError) => {
+
+            if (!job) {
+                return;
+            }
+
+            if (audioError) {
+
+                job.status = "error";
+                job.error =
+                    "Impossible d'extraire l'audio : " +
+                    audioError.message;
+                job.done = true;
+
+                return;
+            }
+
+            job.progress = 25;
+            job.stage = "audio_complete";
+
+            job.audioUrl =
+                `/outputs/${path.basename(audioPath)}`;
+
+            /*
+             * WAV interne pour Whisper.
+             */
+            ffmpegExtractAudio(
+                videoPath,
+                wavPath,
+                (wavError) => {
+
+                    if (!job) {
+                        return;
+                    }
+
+                    if (wavError) {
+
+                        job.status = "error";
+                        job.error =
+                            "Préparation de l'audio pour la transcription impossible : " +
+                            wavError.message;
+                        job.done = true;
+
+                        return;
+                    }
+
+                    job.progress = 30;
+                    job.stage = "transcription";
+
+                    const python =
+                        spawn(
+                            pythonCommand(),
+                            [
+                                path.join(
+                                    __dirname,
+                                    "transcribe.py"
+                                ),
+                                wavPath,
+                                sourceLanguage
+                            ],
+                            {
+                                windowsHide: true
+                            }
+                        );
+
+                    const rl =
+                        readline.createInterface({
+                            input: python.stdout
+                        });
+
+                    rl.on("line", (line) => {
+
+                        try {
+
+                            const event =
+                                JSON.parse(line);
+
+                            const activeJob =
+                                jobs.get(jobId);
+
+                            if (!activeJob) {
+                                return;
+                            }
+
+                            if (
+                                event.type === "start"
+                            ) {
+
+                                activeJob.progress =
+                                    event.progress || 30;
+
+                                activeJob.stage =
+                                    event.stage ||
+                                    "transcription";
+                            }
+
+                            if (
+                                event.type === "progress"
+                            ) {
+
+                                activeJob.progress =
+                                    event.progress ||
+                                    activeJob.progress;
+
+                                activeJob.stage =
+                                    "transcription";
+
+                                if (
+                                    Array.isArray(
+                                        event.segments
+                                    )
+                                ) {
+
+                                    activeJob.subtitles.push(
+                                        ...event.segments
+                                    );
+                                }
+                            }
+
+                            if (
+                                event.type === "complete"
+                            ) {
+
+                                activeJob.progress = 100;
+                                activeJob.stage = "complete";
+                                activeJob.status = "complete";
+                                activeJob.done = true;
+
+                                if (
+                                    Array.isArray(
+                                        event.segments
+                                    )
+                                ) {
+
+                                    activeJob.subtitles =
+                                        event.segments;
+                                }
+
+                                try {
+                                    fs.unlinkSync(wavPath);
+                                } catch {}
+
+                                activeJob.sourceVideoPath =
+                                    videoPath;
+
+                                activeJob.sourceVideoUrl =
+                                    `/uploads/${path.basename(videoPath)}`;
+                            }
+
+                        } catch {}
+                    });
+
+                    let stderr = "";
+
+                    python.stderr.on(
+                        "data",
+                        data => {
+                            stderr +=
+                                data.toString();
+                        }
+                    );
+
+                    python.on(
+                        "error",
+                        error => {
+
+                            const activeJob =
+                                jobs.get(jobId);
+
+                            if (!activeJob) {
+                                return;
+                            }
+
+                            activeJob.status = "error";
+                            activeJob.error =
+                                error.message;
+                            activeJob.done = true;
+                        }
+                    );
+
+                    python.on(
+                        "close",
+                        code => {
+
+                            const activeJob =
+                                jobs.get(jobId);
+
+                            if (!activeJob) {
+                                return;
+                            }
+
+                            if (
+                                code !== 0 &&
+                                !activeJob.done
+                            ) {
+
+                                activeJob.status =
+                                    "error";
+
+                                activeJob.error =
+                                    stderr ||
+                                    `Transcription arrêtée (code ${code}).`;
+
+                                activeJob.done = true;
+                            }
+                        }
+                    );
+                }
+            );
+        }
+    );
+
+    res.json({
+        success: true,
+        jobId,
+        progress: 5,
+        stage: "starting"
+    });
+});
+
+app.get(
+    "/api/transcribe/:jobId",
+    (req, res) => {
+
+        const job =
+            jobs.get(req.params.jobId);
+
+        if (!job) {
+
+            return res.status(404).json({
+                success: false,
+                error: "Job introuvable."
+            });
+        }
+
+        res.json({
+            success: true,
+            ...job
+        });
+    }
+);
+
+/*
+ * ============================================================
+ * TRADUCTION TEXTE
+ * ============================================================
+ */
 
 app.post(
-    "/api/transcribe",
-    upload.single("video"),
+    "/api/translate",
+    (req, res) => {
+
+        try {
+
+            const sourceLanguage =
+                req.body.sourceLanguage ||
+                "eng_Latn";
+
+            const targetLanguage =
+                req.body.targetLanguage ||
+                "ewe_Latn";
+
+            const subtitles =
+                Array.isArray(req.body.subtitles)
+                    ? req.body.subtitles
+                    : [];
+
+            if (!subtitles.length) {
+
+                return res.status(400).json({
+                    success: false,
+                    error: "Aucun texte à traduire."
+                });
+            }
+
+            const jobId =
+                crypto.randomUUID();
+
+            const input =
+                path.join(
+                    UPLOAD_DIR,
+                    `${jobId}-input.srt`
+                );
+
+            const output =
+                path.join(
+                    UPLOAD_DIR,
+                    `${jobId}-output.srt`
+                );
+
+            function fmt(sec) {
+
+                sec = Number(sec) || 0;
+
+                const h =
+                    Math.floor(sec / 3600);
+
+                const m =
+                    Math.floor(
+                        (sec % 3600) / 60
+                    );
+
+                const s =
+                    Math.floor(sec % 60);
+
+                const ms =
+                    Math.floor(
+                        (sec -
+                            Math.floor(sec)) *
+                        1000
+                    );
+
+                return (
+                    String(h).padStart(2, "0") +
+                    ":" +
+                    String(m).padStart(2, "0") +
+                    ":" +
+                    String(s).padStart(2, "0") +
+                    "," +
+                    String(ms).padStart(3, "0")
+                );
+            }
+
+            const inputSrt =
+                subtitles
+                    .map((s, i) => {
+
+                        return (
+                            `${i + 1}\n` +
+                            `${fmt(s.start)} --> ${fmt(s.end)}\n` +
+                            `${s.text || ""}`
+                        );
+                    })
+                    .join("\n\n");
+
+            fs.writeFileSync(
+                input,
+                inputSrt,
+                "utf8"
+            );
+
+            jobs.set(jobId, {
+                type: "translation",
+                status: "processing",
+                progress: 0,
+                stage: "starting",
+                sourceLanguage,
+                targetLanguage,
+                subtitles: [],
+                done: false,
+                error: null
+            });
+
+            const python =
+                spawn(
+                    pythonCommand(),
+                    [
+                        path.join(
+                            __dirname,
+                            "translate_srt.py"
+                        ),
+                        input,
+                        output,
+                        sourceLanguage,
+                        targetLanguage
+                    ],
+                    {
+                        windowsHide: true
+                    }
+                );
+
+            const rl =
+                readline.createInterface({
+                    input: python.stdout
+                });
+
+            let stderr = "";
+
+            python.stderr.on(
+                "data",
+                data => {
+                    stderr +=
+                        data.toString();
+                }
+            );
+
+            rl.on(
+                "line",
+                line => {
+
+                    try {
+
+                        const event =
+                            JSON.parse(line);
+
+                        const job =
+                            jobs.get(jobId);
+
+                        if (!job) {
+                            return;
+                        }
+
+                        if (
+                            event.type === "start"
+                        ) {
+
+                            job.progress =
+                                event.progress || 5;
+
+                            job.stage =
+                                event.stage ||
+                                "translation";
+                        }
+
+                        if (
+                            event.type === "progress"
+                        ) {
+
+                            job.progress =
+                                event.progress ||
+                                job.progress;
+
+                            job.stage =
+                                "translation";
+
+                            if (
+                                event.subtitle
+                            ) {
+
+                                job.subtitles.push(
+                                    event.subtitle
+                                );
+                            }
+                        }
+
+                        if (
+                            event.type === "complete"
+                        ) {
+
+                            job.progress = 100;
+                            job.stage = "complete";
+                            job.status = "complete";
+                            job.done = true;
+
+                            if (
+                                Array.isArray(
+                                    event.segments
+                                )
+                            ) {
+
+                                job.subtitles =
+                                    event.segments;
+                            }
+
+                            try {
+                                fs.unlinkSync(input);
+                            } catch {}
+
+                            try {
+                                fs.unlinkSync(output);
+                            } catch {}
+                        }
+
+                        if (
+                            event.type === "error"
+                        ) {
+
+                            job.status = "error";
+
+                            job.error =
+                                event.error ||
+                                "Erreur de traduction.";
+
+                            job.done = true;
+                        }
+
+                    } catch {}
+                }
+            );
+
+            python.on(
+                "error",
+                error => {
+
+                    const job =
+                        jobs.get(jobId);
+
+                    if (!job) {
+                        return;
+                    }
+
+                    job.status = "error";
+                    job.error =
+                        error.message;
+                    job.done = true;
+                }
+            );
+
+            python.on(
+                "close",
+                code => {
+
+                    const job =
+                        jobs.get(jobId);
+
+                    if (!job) {
+                        return;
+                    }
+
+                    if (
+                        code !== 0 &&
+                        !job.done
+                    ) {
+
+                        job.status = "error";
+
+                        job.error =
+                            stderr ||
+                            `Traduction arrêtée (code ${code}).`;
+
+                        job.done = true;
+                    }
+                }
+            );
+
+            res.json({
+                success: true,
+                jobId,
+                progress: 0,
+                stage: "starting"
+            });
+
+        } catch (error) {
+
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    }
+);
+
+app.get(
+    "/api/translate/:jobId",
+    (req, res) => {
+
+        const job =
+            jobs.get(req.params.jobId);
+
+        if (!job) {
+
+            return res.status(404).json({
+                success: false,
+                error: "Job de traduction introuvable."
+            });
+        }
+
+        res.json({
+            success: true,
+            ...job
+        });
+    }
+);
+
+/*
+ * ============================================================
+ * TRADUCTION AUDIO ÉWÉ
+ *
+ * Accepte :
+ * - transcriptionJobId
+ * - voicePreset
+ * - voice (échantillon utilisateur)
+ * ============================================================
+ */
+
+app.post(
+    "/api/translate-audio",
+    upload.single("voice"),
     async (req, res) => {
 
-        let videoPath = null;
-        let audioPath = null;
-        let srtPath = null;
+        try {
+
+            let sourceJob = null;
+
+            const transcriptionJobId =
+                req.body?.transcriptionJobId;
+
+            if (transcriptionJobId) {
+
+                sourceJob =
+                    jobs.get(
+                        transcriptionJobId
+                    );
+            }
+
+            /*
+             * Si aucun ID n'est envoyé,
+             * on récupère la dernière transcription complète.
+             */
+            if (!sourceJob) {
+
+                for (
+                    const job of jobs.values()
+                ) {
+
+                    if (
+                        job.status === "complete" &&
+                        Array.isArray(
+                            job.subtitles
+                        ) &&
+                        job.subtitles.length > 0
+                    ) {
+
+                        sourceJob = job;
+                    }
+                }
+            }
+
+            if (!sourceJob) {
+
+                return res.status(400).json({
+                    success: false,
+                    error:
+                        "Aucune transcription terminée disponible."
+                });
+            }
+
+            const voicePreset =
+                req.body?.voicePreset ||
+                "current";
+
+            let voiceReferencePath =
+                req.body?.voiceReferencePath ||
+                "";
+
+            /*
+             * Si "Ma propre voix" est sélectionnée
+             * et qu'un fichier est envoyé avec le champ "voice",
+             * on le sauvegarde réellement.
+             */
+            if (
+                req.file &&
+                voicePreset === "my-voice"
+            ) {
+
+                const extension =
+                    path.extname(
+                        req.file.originalname
+                    ) || ".webm";
+
+                const referencePath =
+                    path.join(
+                        OUTPUT_DIR,
+                        `my-voice-reference-${crypto.randomUUID()}${extension}`
+                    );
+
+                fs.copyFileSync(
+                    req.file.path,
+                    referencePath
+                );
+
+                try {
+                    fs.unlinkSync(
+                        req.file.path
+                    );
+                } catch {}
+
+                voiceReferencePath =
+                    referencePath;
+            }
+
+            /*
+             * Si le navigateur envoie une URL
+             * déjà enregistrée, on la convertit en chemin.
+             */
+            if (
+                voiceReferencePath &&
+                voiceReferencePath.startsWith(
+                    "/outputs/"
+                )
+            ) {
+
+                voiceReferencePath =
+                    path.join(
+                        OUTPUT_DIR,
+                        path.basename(
+                            voiceReferencePath
+                        )
+                    );
+            }
+
+            /*
+             * Pour les presets autres que my-voice,
+             * aucune référence personnelle n'est obligatoire.
+             */
+            if (
+                voicePreset !== "my-voice"
+            ) {
+                voiceReferencePath = "";
+            }
+
+            const jobId =
+                crypto.randomUUID();
+
+            jobs.set(jobId, {
+                status: "processing",
+                progress: 5,
+                stage: "starting",
+                sourceLanguage:
+                    sourceJob.sourceLanguage ||
+                    "eng_Latn",
+                voicePreset,
+                voiceReferencePath,
+                subtitles: [],
+                audioUrl: null,
+                done: false,
+                error: null
+            });
+
+            const audioJob =
+                jobs.get(jobId);
+
+            startEweAudioTranslation({
+                subtitles:
+                    sourceJob.subtitles,
+
+                sourceLanguage:
+                    sourceJob.sourceLanguage ||
+                    "eng_Latn",
+
+                outputDir:
+                    OUTPUT_DIR,
+
+                job:
+                    audioJob,
+
+                voicePreset,
+                voiceReferencePath
+
+            }).catch(error => {
+
+                audioJob.status = "error";
+
+                audioJob.error =
+                    error.message;
+
+                audioJob.done = true;
+            });
+
+            res.json({
+                success: true,
+                jobId,
+                progress: 5,
+                stage: "starting",
+                voicePreset
+            });
+
+        } catch (error) {
+
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    }
+);
+
+app.get(
+    "/api/translate-audio/:jobId",
+    (req, res) => {
+
+        const job =
+            jobs.get(req.params.jobId);
+
+        if (!job) {
+
+            return res.status(404).json({
+                success: false,
+                error:
+                    "Job de traduction audio introuvable."
+            });
+        }
+
+        res.json({
+            success: true,
+            ...job
+        });
+    }
+);
+
+/*
+ * ============================================================
+ * ENREGISTREMENT D'UNE VOIX DE RÉFÉRENCE
+ * ============================================================
+ */
+
+app.post(
+    "/api/save-voice-reference",
+    upload.single("voice"),
+    (req, res) => {
 
         try {
 
@@ -266,770 +999,361 @@ app.post(
 
                 return res.status(400).json({
                     success: false,
-                    error: "Aucune vidéo reçue."
+                    error:
+                        "Aucun échantillon vocal reçu."
                 });
-
             }
 
-            videoPath = req.file.path;
+            const extension =
+                path.extname(
+                    req.file.originalname
+                ) || ".webm";
 
-            const id =
-                path.basename(
-                    req.file.filename,
-                    path.extname(req.file.filename)
-                );
-
-            audioPath =
+            const referencePath =
                 path.join(
                     OUTPUT_DIR,
-                    `${id}.wav`
+                    "my-voice-reference" +
+                    extension
                 );
 
-            srtPath =
-                path.join(
-                    OUTPUT_DIR,
-                    `${id}.srt`
-                );
-
-            console.log("");
-            console.log("🎬 Vidéo reçue :", req.file.originalname);
-
-            console.log("🎧 Extraction audio...");
-
-            await extractAudio(
-                videoPath,
-                audioPath
+            fs.copyFileSync(
+                req.file.path,
+                referencePath
             );
 
-            console.log("🧠 Transcription anglaise...");
-
-            await transcribeAudio(
-                audioPath,
-                srtPath
-            );
-
-            const srt =
-                fs.readFileSync(
-                    srtPath,
-                    "utf8"
+            try {
+                fs.unlinkSync(
+                    req.file.path
                 );
-
-            console.log("✅ Transcription terminée.");
+            } catch {}
 
             res.json({
-
                 success: true,
-
                 message:
-                    "Transcription anglaise terminée.",
-
-                filename:
-                    path.basename(srtPath),
-
-                subtitles:
-                    srt
-
+                    "Échantillon vocal enregistré.",
+                voiceReferenceUrl:
+                    "/outputs/" +
+                    path.basename(
+                        referencePath
+                    )
             });
 
         } catch (error) {
 
-            console.error("❌ ERREUR TRANSCRIPTION");
-            console.error(error);
-
             res.status(500).json({
-
                 success: false,
-
-                error:
-                    error.message ||
-                    "Erreur pendant la transcription."
-
+                error: error.message
             });
-
-        } finally {
-
-            if (
-                videoPath &&
-                fs.existsSync(videoPath)
-            ) {
-                try {
-                    fs.unlinkSync(videoPath);
-                } catch {}
-            }
-
-            if (
-                audioPath &&
-                fs.existsSync(audioPath)
-            ) {
-                try {
-                    fs.unlinkSync(audioPath);
-                } catch {}
-            }
-
         }
-
     }
 );
 
-
-/* =========================================================
-   TRADUCTION SRT ANGLAIS → ÉWÉ
-========================================================= */
-
-function translateSRT(subtitles) {
-
-    return new Promise((resolve, reject) => {
-
-        if (!fs.existsSync(VENV_PYTHON)) {
-
-            return reject(
-                new Error(
-                    `Python virtuel introuvable : ${VENV_PYTHON}`
-                )
-            );
-
-        }
-
-        if (!fs.existsSync(TRANSLATE_SCRIPT)) {
-
-            return reject(
-                new Error(
-                    `Script de traduction introuvable : ${TRANSLATE_SCRIPT}`
-                )
-            );
-
-        }
-
-        const input =
-            JSON.stringify(subtitles);
-
-        const child =
-            spawn(
-                VENV_PYTHON,
-                [TRANSLATE_SCRIPT],
-                {
-                    windowsHide: true
-                }
-            );
-
-        let stdout = "";
-        let stderr = "";
-
-        child.stdout.on("data", data => {
-            stdout += data.toString();
-        });
-
-        child.stderr.on("data", data => {
-            stderr += data.toString();
-            console.log(data.toString());
-        });
-
-        child.on("error", error => {
-            reject(error);
-        });
-
-        child.on("close", code => {
-
-            if (code !== 0) {
-
-                return reject(
-                    new Error(
-                        `NLLB a échoué avec le code ${code}\n${stderr}`
-                    )
-                );
-
-            }
-
-            try {
-
-                const result =
-                    JSON.parse(stdout);
-
-                resolve(result);
-
-            } catch (error) {
-
-                reject(
-                    new Error(
-                        `Réponse NLLB invalide.\n${stdout}\n${stderr}`
-                    )
-                );
-
-            }
-
-        });
-
-        child.stdin.write(input);
-        child.stdin.end();
-
-    });
-
-}
-
-
-/* =========================================================
-   PARSER SRT
-========================================================= */
-
-function parseSRT(content) {
-
-    const blocks =
-        content
-            .replace(/\r/g, "")
-            .trim()
-            .split(/\n\s*\n/);
-
-    const subtitles = [];
-
-    for (const block of blocks) {
-
-        const lines =
-            block.split("\n");
-
-        if (lines.length < 2) {
-            continue;
-        }
-
-        let timeLineIndex = 0;
-
-        if (/^\d+$/.test(lines[0].trim())) {
-            timeLineIndex = 1;
-        }
-
-        const timeLine =
-            lines[timeLineIndex];
-
-        if (
-            !timeLine ||
-            !timeLine.includes("-->")
-        ) {
-            continue;
-        }
-
-        const times =
-            timeLine.split("-->");
-
-        const start =
-            times[0].trim();
-
-        const end =
-            times[1].trim();
-
-        const text =
-            lines
-                .slice(timeLineIndex + 1)
-                .join(" ")
-                .replace(/<[^>]*>/g, "")
-                .trim();
-
-        if (!text) {
-            continue;
-        }
-
-        subtitles.push({
-            start,
-            end,
-            text
-        });
-
-    }
-
-    return subtitles;
-
-}
-
-
-/* =========================================================
-   CRÉER SRT
-========================================================= */
-
-function createSRT(subtitles) {
-
-    return subtitles
-        .map((subtitle, index) => {
-
-            return [
-                index + 1,
-                `${subtitle.start} --> ${subtitle.end}`,
-                subtitle.text,
-                ""
-            ].join("\n");
-
-        })
-        .join("\n");
-
-}
-
-
-/* =========================================================
-   API TRADUCTION
-========================================================= */
+/*
+ * ============================================================
+ * APPLICATION AUDIO ÉWÉ À LA VIDÉO
+ *
+ * Une seule route.
+ *
+ * Vidéo originale :
+ *   0:v:0
+ *
+ * Audio Éwé :
+ *   1:a:0
+ *
+ * La vidéo est conservée sans réencodage.
+ * L'audio original est remplacé par l'audio Éwé.
+ * ============================================================
+ */
 
 app.post(
-    "/api/translate",
+    "/api/apply-ewe-audio",
     async (req, res) => {
 
         try {
 
-            let subtitles =
-                req.body.subtitles;
+            const transcriptionJobId =
+                req.body?.transcriptionJobId;
 
-            if (!subtitles) {
+            const audioJobId =
+                req.body?.audioJobId;
+
+            let sourceJob =
+                transcriptionJobId
+                    ? jobs.get(
+                        transcriptionJobId
+                    )
+                    : null;
+
+            let audioJob =
+                audioJobId
+                    ? jobs.get(
+                        audioJobId
+                    )
+                    : null;
+
+            /*
+             * Recherche automatique de la vidéo.
+             */
+            if (!sourceJob) {
+
+                for (
+                    const job of jobs.values()
+                ) {
+
+                    if (
+                        job.sourceVideoPath &&
+                        fs.existsSync(
+                            job.sourceVideoPath
+                        )
+                    ) {
+
+                        sourceJob = job;
+                        break;
+                    }
+                }
+            }
+
+            /*
+             * Recherche automatique du dernier audio Éwé.
+             */
+            if (!audioJob) {
+
+                for (
+                    const job of jobs.values()
+                ) {
+
+                    if (
+                        job.status === "complete" &&
+                        job.audioUrl &&
+                        job.audioUrl.includes(
+                            "-ewe.mp3"
+                        )
+                    ) {
+
+                        audioJob = job;
+                    }
+                }
+            }
+
+            if (
+                !sourceJob ||
+                !sourceJob.sourceVideoPath
+            ) {
 
                 return res.status(400).json({
-
                     success: false,
-
                     error:
-                        "Aucun sous-titre fourni."
-
+                        "Vidéo originale introuvable."
                 });
-
             }
 
-            if (typeof subtitles === "string") {
-
-                subtitles =
-                    parseSRT(subtitles);
-
-            }
-
-            if (!Array.isArray(subtitles)) {
+            if (
+                !audioJob ||
+                !audioJob.audioUrl ||
+                audioJob.status !== "complete"
+            ) {
 
                 return res.status(400).json({
-
                     success: false,
-
                     error:
-                        "Format de sous-titres invalide."
-
+                        "Audio Éwé synchronisé introuvable."
                 });
-
             }
 
-            if (subtitles.length === 0) {
-
-                return res.status(400).json({
-
-                    success: false,
-
-                    error:
-                        "Aucun dialogue à traduire."
-
-                });
-
-            }
-
-            console.log("");
-            console.log("=================================");
-            console.log("🇬🇧 → 🇹🇬 TRADUCTION NLLB");
-            console.log("=================================");
-            console.log(
-                `${subtitles.length} dialogues à traduire.`
-            );
-
-            const translated =
-                await translateSRT(subtitles);
-
-            const srtEwe =
-                createSRT(translated);
-
-            const filename =
-                `ewe-${crypto.randomBytes(8).toString("hex")}.srt`;
-
-            const outputPath =
+            const audioPath =
                 path.join(
                     OUTPUT_DIR,
-                    filename
+                    path.basename(
+                        audioJob.audioUrl
+                    )
                 );
 
-            fs.writeFileSync(
-                outputPath,
-                srtEwe,
-                "utf8"
+            if (
+                !fs.existsSync(audioPath)
+            ) {
+
+                return res.status(400).json({
+                    success: false,
+                    error:
+                        "Fichier audio Éwé introuvable."
+                });
+            }
+
+            const jobId =
+                crypto.randomUUID();
+
+            const outputVideo =
+                path.join(
+                    OUTPUT_DIR,
+                    `${jobId}-ewe-video.mp4`
+                );
+
+            jobs.set(jobId, {
+                status: "processing",
+                progress: 10,
+                stage: "preparing",
+                videoUrl: null,
+                done: false,
+                error: null
+            });
+
+            const finalJob =
+                jobs.get(jobId);
+
+            finalJob.progress = 25;
+            finalJob.stage =
+                "applying_ewe_audio";
+
+            execFile(
+                "ffmpeg",
+                [
+                    "-y",
+
+                    "-i",
+                    sourceJob.sourceVideoPath,
+
+                    "-i",
+                    audioPath,
+
+                    /*
+                     * Vidéo originale uniquement.
+                     */
+                    "-map",
+                    "0:v:0",
+
+                    /*
+                     * Audio Éwé uniquement.
+                     */
+                    "-map",
+                    "1:a:0",
+
+                    /*
+                     * Vidéo copiée sans réencodage.
+                     */
+                    "-c:v",
+                    "copy",
+
+                    /*
+                     * Audio Éwé encodé en AAC.
+                     */
+                    "-c:a",
+                    "aac",
+
+                    "-b:a",
+                    "192k",
+
+                    /*
+                     * Évite de dépasser la durée disponible.
+                     */
+                    "-shortest",
+
+                    "-movflags",
+                    "+faststart",
+
+                    outputVideo
+                ],
+
+                (error, stdout, stderr) => {
+
+                    if (error) {
+
+                        finalJob.status =
+                            "error";
+
+                        finalJob.error =
+                            stderr ||
+                            error.message ||
+                            "Impossible de créer la vidéo finale.";
+
+                        finalJob.done = true;
+
+                        return;
+                    }
+
+                    if (
+                        !fs.existsSync(
+                            outputVideo
+                        )
+                    ) {
+
+                        finalJob.status =
+                            "error";
+
+                        finalJob.error =
+                            "La vidéo finale n'a pas été créée.";
+
+                        finalJob.done = true;
+
+                        return;
+                    }
+
+                    finalJob.progress = 100;
+                    finalJob.stage = "complete";
+                    finalJob.status = "complete";
+                    finalJob.done = true;
+
+                    finalJob.videoUrl =
+                        "/outputs/" +
+                        path.basename(
+                            outputVideo
+                        );
+                }
             );
 
-            console.log("✅ Traduction Éwé terminée.");
-
             res.json({
-
                 success: true,
-
-                message:
-                    "Traduction Anglais → Éwé terminée.",
-
-                filename,
-
-                subtitles:
-                    translated,
-
-                srt:
-                    srtEwe
-
+                jobId,
+                progress: 10,
+                stage: "preparing"
             });
 
         } catch (error) {
 
-            console.error("❌ ERREUR TRADUCTION");
-            console.error(error);
-
             res.status(500).json({
-
                 success: false,
-
-                error:
-                    error.message ||
-                    "Erreur pendant la traduction."
-
+                error: error.message
             });
-
         }
-
     }
 );
-
-
-/* =========================================================
-   API STATUS
-========================================================= */
 
 app.get(
-    "/api/status",
+    "/api/apply-ewe-audio/:jobId",
     (req, res) => {
 
-        res.json({
+        const job =
+            jobs.get(
+                req.params.jobId
+            );
 
-            success: true,
+        if (!job) {
 
-            application:
-                "EweVoice",
-
-            whisper:
-                fs.existsSync(
-                    WHISPER_MODEL
-                ),
-
-            ffmpeg:
-                fs.existsSync(
-                    FFMPEG_PATH
-                ),
-
-            python:
-                fs.existsSync(
-                    VENV_PYTHON
-                ),
-
-            nllb:
-                fs.existsSync(
-                    TRANSLATE_SCRIPT
-                )
-
-        });
-
-    }
-);
-
-
-/* =========================================================
-   ERREURS
-========================================================= */
-
-app.use(
-    (error, req, res, next) => {
-
-        console.error(error);
-
-        if (
-            error instanceof multer.MulterError
-        ) {
-
-            return res.status(400).json({
-
+            return res.status(404).json({
                 success: false,
-
                 error:
-                    `Erreur upload : ${error.message}`
-
+                    "Job vidéo introuvable."
             });
-
         }
 
-        res.status(500).json({
-
-            success: false,
-
-            error:
-                error.message ||
-                "Erreur serveur."
-
+        res.json({
+            success: true,
+            ...job
         });
-
     }
 );
 
-
-/* =========================================================
-   SERVEUR
-========================================================= */
+/*
+ * ============================================================
+ * DÉMARRAGE
+ * ============================================================
+ */
 
 app.listen(
     PORT,
     () => {
 
-        console.log("");
-        console.log("=================================");
-        console.log("       EWEVOICE DEMARRE");
-        console.log("=================================");
         console.log(
-            `Site : http://localhost:${PORT}`
+            `EweVoice lancé sur le port ${PORT}`
         );
-
-        console.log(
-            `FFmpeg : ${
-                fs.existsSync(FFMPEG_PATH)
-                    ? "OK"
-                    : "INTROUVABLE"
-            }`
-        );
-
-        console.log(
-            `Whisper : ${
-                fs.existsSync(WHISPER_MODEL)
-                    ? "OK"
-                    : "INTROUVABLE"
-            }`
-        );
-
-        console.log(
-            `Python : ${
-                fs.existsSync(VENV_PYTHON)
-                    ? "OK"
-                    : "INTROUVABLE"
-            }`
-        );
-
-        console.log(
-            `NLLB : ${
-                fs.existsSync(TRANSLATE_SCRIPT)
-                    ? "OK"
-                    : "INTROUVABLE"
-            }`
-        );
-
-        console.log("");
-
     }
 );
-/* =========================================================
-   API DOUBLAGE VIDEO COMPLET — EWE
-========================================================= */
-
-app.post(
-    "/api/dub-video",
-    upload.single("video"),
-    async (req, res) => {
-
-        let videoPath = null;
-        let englishSrt = null;
-        let eweSrt = null;
-        let eweAudio = null;
-        let finalVideo = null;
-
-        try {
-
-            if (!req.file) {
-                return res.status(400).json({
-                    success: false,
-                    error: "Aucune vidéo reçue."
-                });
-            }
-
-            videoPath = req.file.path;
-
-            const id = path.basename(
-                req.file.filename,
-                path.extname(req.file.filename)
-            );
-
-            englishSrt = path.join(
-                OUTPUT_DIR,
-                `${id}-english.srt`
-            );
-
-            eweSrt = path.join(
-                OUTPUT_DIR,
-                `${id}-ewe.srt`
-            );
-
-            eweAudio = path.join(
-                OUTPUT_DIR,
-                `${id}-ewe.wav`
-            );
-
-            finalVideo = path.join(
-                OUTPUT_DIR,
-                `${id}-EWE.mp4`
-            );
-
-            console.log("");
-            console.log("=================================");
-            console.log("DOUBLAGE EWEVOICE");
-            console.log("=================================");
-
-            /* 1 — AUDIO + WHISPER */
-
-            console.log("1/4 Transcription anglaise...");
-
-            const audioPath = path.join(
-                OUTPUT_DIR,
-                `${id}-source.wav`
-            );
-
-            await extractAudio(
-                videoPath,
-                audioPath
-            );
-
-            await transcribeAudio(
-                audioPath,
-                englishSrt
-            );
-
-            if (fs.existsSync(audioPath)) {
-                fs.unlinkSync(audioPath);
-            }
-
-            /* 2 — TRADUCTION ÉWÉ */
-
-            console.log("2/4 Traduction anglaise → Éwé...");
-
-            await runPython(
-                "translate_srt.py",
-                [
-                    englishSrt,
-                    eweSrt
-                ]
-            );
-
-            if (!fs.existsSync(eweSrt)) {
-                throw new Error(
-                    "Le SRT Éwé n'a pas été généré."
-                );
-            }
-
-            /* 3 — VOIX ÉWÉ */
-
-            console.log("3/4 Génération de la voix Éwé...");
-
-            await runPython(
-                "dub_ewe.py",
-                [
-                    eweSrt,
-                    eweAudio
-                ]
-            );
-
-            if (!fs.existsSync(eweAudio)) {
-                throw new Error(
-                    "La voix Éwé n'a pas été générée."
-                );
-            }
-
-            /* 4 — RENDU VIDEO */
-
-            console.log("4/4 Rendu de la vidéo finale...");
-
-            await runPython(
-                "render_video.py",
-                [
-                    videoPath,
-                    eweAudio,
-                    finalVideo
-                ]
-            );
-
-            if (!fs.existsSync(finalVideo)) {
-                throw new Error(
-                    "La vidéo finale n'a pas été créée."
-                );
-            }
-
-            console.log("");
-            console.log("=================================");
-            console.log("VIDEO EWEVOICE TERMINEE");
-            console.log("=================================");
-
-            res.json({
-
-                success: true,
-
-                message:
-                    "Vidéo doublée en Éwé terminée.",
-
-                video:
-                    `/outputs/${path.basename(finalVideo)}`,
-
-                english_srt:
-                    `/outputs/${path.basename(englishSrt)}`,
-
-                ewe_srt:
-                    `/outputs/${path.basename(eweSrt)}`,
-
-                audio:
-                    `/outputs/${path.basename(eweAudio)}`
-
-            });
-
-        } catch (error) {
-
-            console.error("");
-            console.error(
-                "❌ ERREUR DOUBLAGE"
-            );
-
-            console.error(error);
-
-            res.status(500).json({
-
-                success: false,
-
-                error:
-                    error.message ||
-                    "Erreur pendant le doublage."
-
-            });
-
-        } finally {
-
-            /*
-             * On conserve les fichiers de sortie.
-             * On supprime seulement la vidéo temporaire.
-             */
-
-            if (
-                videoPath &&
-                fs.existsSync(videoPath)
-            ) {
-                try {
-                    fs.unlinkSync(videoPath);
-                } catch {}
-            }
-
-        }
-
-    }
-);
-
-
-
-
-
-
-
-
-
-
-
-
-
-

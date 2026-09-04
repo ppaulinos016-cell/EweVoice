@@ -1,17 +1,12 @@
 ﻿import sys
-
-try:
-    sys.stdout.reconfigure(encoding="utf-8")
-    sys.stderr.reconfigure(encoding="utf-8")
-except Exception:
-    pass
 import os
 import re
-import json
 
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
+
 MODEL_NAME = "facebook/nllb-200-distilled-600M"
+
 
 LANGUAGE_MAP = {
     "eng_Latn": "eng_Latn",
@@ -30,9 +25,11 @@ def srt_to_blocks(content):
         return []
 
     blocks = re.split(r"\n\s*\n", content)
+
     result = []
 
     for block in blocks:
+
         lines = block.split("\n")
 
         if len(lines) < 3:
@@ -40,33 +37,54 @@ def srt_to_blocks(content):
 
         index = lines[0].strip()
 
-        if "-->" not in lines[1]:
+        time_line_index = 1
+
+        if "-->" not in lines[time_line_index]:
+            time_line_index = 0
+
+        if "-->" not in lines[time_line_index]:
             continue
 
-        times = lines[1].split("-->")
+        times = lines[time_line_index].split("-->")
 
         if len(times) != 2:
             continue
 
+        start = times[0].strip()
+        end = times[1].strip()
+
+        text = " ".join(
+            lines[time_line_index + 1:]
+        ).strip()
+
         result.append({
             "id": index,
-            "start": times[0].strip(),
-            "end": times[1].strip(),
-            "text": " ".join(lines[2:]).strip()
+            "start": start,
+            "end": end,
+            "text": text
         })
 
     return result
 
 
 def blocks_to_srt(blocks):
+
     output = []
 
     for i, block in enumerate(blocks, 1):
-        output.append(str(i))
+
+        output.append(
+            str(i)
+        )
+
         output.append(
             f"{block['start']} --> {block['end']}"
         )
-        output.append(block["text"])
+
+        output.append(
+            block["text"]
+        )
+
         output.append("")
 
     return "\n".join(output)
@@ -79,6 +97,7 @@ def translate_text(
     source_language,
     target_language
 ):
+
     text = text.strip()
 
     if not text:
@@ -103,29 +122,23 @@ def translate_text(
         num_beams=4
     )
 
-    return tokenizer.batch_decode(
+    translated = tokenizer.batch_decode(
         generated_tokens,
         skip_special_tokens=True
-    )[0].strip()
+    )[0]
 
-
-def emit(data):
-    print(
-        json.dumps(
-            data,
-            ensure_ascii=False
-        ),
-        flush=True
-    )
+    return translated.strip()
 
 
 def main():
 
     if len(sys.argv) < 3:
-        emit({
-            "type": "error",
-            "error": "Arguments insuffisants."
-        })
+
+        print(
+            "Usage: python translate_srt.py "
+            "input.srt output.srt [source] [target]"
+        )
+
         sys.exit(1)
 
     input_file = sys.argv[1]
@@ -143,14 +156,29 @@ def main():
         else "ewe_Latn"
     )
 
-    source = LANGUAGE_MAP.get(source, source)
-    target = LANGUAGE_MAP.get(target, target)
+    source = LANGUAGE_MAP.get(
+        source,
+        source
+    )
+
+    target = LANGUAGE_MAP.get(
+        target,
+        target
+    )
+
+    print("========================================")
+    print("TRADUCTION SRT")
+    print("========================================")
+    print(f"Source : {source}")
+    print(f"Cible  : {target}")
+    print()
 
     if not os.path.exists(input_file):
-        emit({
-            "type": "error",
-            "error": "Fichier SRT introuvable."
-        })
+
+        print(
+            f"ERREUR : fichier introuvable : {input_file}"
+        )
+
         sys.exit(1)
 
     with open(
@@ -158,23 +186,27 @@ def main():
         "r",
         encoding="utf-8"
     ) as f:
+
         content = f.read()
 
     blocks = srt_to_blocks(content)
 
     if not blocks:
-        emit({
-            "type": "error",
-            "error": "Aucun segment SRT trouvé."
-        })
+
+        print(
+            "ERREUR : aucun segment SRT trouvé."
+        )
+
         sys.exit(1)
 
-    emit({
-        "type": "start",
-        "progress": 5,
-        "stage": "loading_model",
-        "total": len(blocks)
-    })
+    print(
+        f"{len(blocks)} segment(s) à traduire."
+    )
+
+    print()
+    print(
+        "Chargement du modèle NLLB..."
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(
         MODEL_NAME
@@ -186,9 +218,17 @@ def main():
 
     translated_blocks = []
 
-    for number, block in enumerate(blocks, 1):
+    for number, block in enumerate(
+        blocks,
+        1
+    ):
+
+        print(
+            f"Traduction {number}/{len(blocks)}..."
+        )
 
         try:
+
             translated_text = translate_text(
                 model,
                 tokenizer,
@@ -199,38 +239,21 @@ def main():
 
         except Exception as error:
 
+            print(
+                f"Erreur segment {number} : {error}"
+            )
+
             translated_text = block["text"]
 
-            emit({
-                "type": "segment_error",
-                "segment": number,
-                "error": str(error)
-            })
+        translated_blocks.append({
 
-        translated_block = {
-            "id": int(block["id"])
-                if str(block["id"]).isdigit()
-                else number,
+            "id": block["id"],
+
             "start": block["start"],
+
             "end": block["end"],
+
             "text": translated_text
-        }
-
-        translated_blocks.append(
-            translated_block
-        )
-
-        progress = 10 + int(
-            (number / len(blocks)) * 90
-        )
-
-        emit({
-            "type": "progress",
-            "progress": min(progress, 99),
-            "stage": "translation",
-            "segment": number,
-            "total": len(blocks),
-            "subtitle": translated_block
         })
 
     output_srt = blocks_to_srt(
@@ -251,16 +274,15 @@ def main():
         "w",
         encoding="utf-8"
     ) as f:
+
         f.write(output_srt)
 
-    emit({
-        "type": "complete",
-        "progress": 100,
-        "stage": "complete",
-        "segments": translated_blocks
-    })
+    print()
+    print("========================================")
+    print("TRADUCTION TERMINEE")
+    print("========================================")
+    print(f"Fichier : {output_file}")
 
 
 if __name__ == "__main__":
     main()
-

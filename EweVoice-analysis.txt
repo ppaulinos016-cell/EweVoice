@@ -1,0 +1,2138 @@
+﻿===== EWEVOICE PROJECT ANALYSIS =====
+DATE: 09/04/2026 13:05:58
+
+
+
+========== package.json ==========
+
+{
+  "dependencies": {
+    "express": "^5.2.1",
+    "multer": "^2.3.0",
+    "uuid": "^14.0.2"
+  }
+}
+
+
+
+========== requirements.txt ==========
+
+torch
+transformers
+numpy
+soundfile
+sentencepiece
+safetensors
+openai-whisper
+
+
+
+========== server.js ==========
+
+const express = require("express");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
+const { spawn } = require("child_process");
+
+const app = express();
+const PORT = 3000;
+
+const ROOT = __dirname;
+const PYTHON_PATH = process.platform === "win32" ? path.join(ROOT, ".venv", "Scripts", "python.exe") : "python3";
+const PUBLIC_DIR = path.join(ROOT, "public");
+const UPLOAD_DIR = path.join(ROOT, "uploads");
+const OUTPUT_DIR = path.join(ROOT, "outputs");
+const MODEL_DIR = path.join(ROOT, "models");
+const VENV_PYTHON = process.platform === "win32" ? path.join(ROOT, ".venv", "Scripts", "python.exe") : "python3";
+
+const FFMPEG_PATH = process.env.FFMPEG_PATH || "ffmpeg";
+
+const WHISPER_MODEL =
+    path.join(MODEL_DIR, "ggml-base.bin");
+
+const TRANSLATE_SCRIPT =
+    path.join(ROOT, "translate_srt.py");
+
+for (const directory of [
+    UPLOAD_DIR,
+    OUTPUT_DIR,
+    MODEL_DIR
+]) {
+    fs.mkdirSync(directory, { recursive: true });
+}
+
+app.use(express.json({ limit: "20mb" }));
+app.use(express.static(PUBLIC_DIR));
+app.use("/outputs", express.static(OUTPUT_DIR));
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, UPLOAD_DIR);
+    },
+
+    filename: (req, file, cb) => {
+        const extension = path.extname(file.originalname);
+        const randomName =
+            crypto.randomBytes(16).toString("hex");
+
+        cb(null, `${randomName}${extension}`);
+    }
+});
+
+const upload = multer({
+    storage,
+
+    limits: {
+        fileSize: 2 * 1024 * 1024 * 1024
+    },
+
+    fileFilter: (req, file, cb) => {
+
+        if (
+            file.mimetype &&
+            file.mimetype.startsWith("video/")
+        ) {
+            cb(null, true);
+        } else {
+            cb(
+                new Error(
+                    "Veuillez sélectionner un fichier vidéo."
+                )
+            );
+        }
+    }
+});
+
+
+/* =========================================================
+   EXÉCUTER UN PROGRAMME
+========================================================= */
+
+function runProcess(command, args, options = {}) {
+
+    return new Promise((resolve, reject) => {
+
+        console.log("");
+        console.log("=================================");
+        console.log("PROCESSUS");
+        console.log("=================================");
+        console.log(command);
+        console.log(args.join(" "));
+
+        const child = spawn(
+            command,
+            args,
+            {
+                windowsHide: true,
+                ...options
+            }
+        );
+
+        let stdout = "";
+        let stderr = "";
+
+        child.stdout.on("data", data => {
+            stdout += data.toString();
+        });
+
+        child.stderr.on("data", data => {
+            stderr += data.toString();
+            console.log(data.toString());
+        });
+
+        child.on("error", error => {
+            reject(error);
+        });
+
+        child.on("close", code => {
+
+            if (code === 0) {
+
+                resolve({
+                    stdout,
+                    stderr
+                });
+
+            } else {
+
+                reject(
+                    new Error(
+                        `Processus terminé avec le code ${code}\n${stderr}`
+                    )
+                );
+
+            }
+
+        });
+
+    });
+
+}
+
+
+/* =========================================================
+   FFMPEG
+========================================================= */
+
+function runFFmpeg(args) {
+    return runProcess(FFMPEG_PATH, args);
+}
+
+
+/* =========================================================
+   EXTRACTION AUDIO
+========================================================= */
+
+async function extractAudio(videoPath, audioPath) {
+
+    await runFFmpeg([
+
+        "-y",
+
+        "-i",
+        videoPath,
+
+        "-vn",
+
+        "-ac",
+        "1",
+
+        "-ar",
+        "16000",
+
+        "-c:a",
+        "pcm_s16le",
+
+        audioPath
+
+    ]);
+
+}
+
+
+/* =========================================================
+   WHISPER
+========================================================= */
+
+function runPython(script, args = []) {
+    return new Promise((resolve, reject) => {
+
+        const child = spawn(
+            PYTHON_PATH,
+            [path.join(ROOT, script), ...args],
+            { windowsHide: true }
+        );
+
+        let stdout = "";
+        let stderr = "";
+
+        child.stdout.on("data", data => {
+            stdout += data.toString();
+            console.log(data.toString());
+        });
+
+        child.stderr.on("data", data => {
+            stderr += data.toString();
+            console.error(data.toString());
+        });
+
+        child.on("error", reject);
+
+        child.on("close", code => {
+
+            if (code === 0) {
+                resolve({ stdout, stderr });
+            } else {
+                reject(
+                    new Error(
+                        `${script} a échoué avec le code ${code}\n${stderr}`
+                    )
+                );
+            }
+
+        });
+
+    });
+}
+
+async function transcribeAudio(audioPath, outputSrt) {
+
+    console.log("Whisper Python : transcription en cours...");
+
+    await runPython(
+        "transcribe.py",
+        [
+            audioPath,
+            outputSrt
+        ]
+    );
+
+    if (!fs.existsSync(outputSrt)) {
+        throw new Error(
+            "Whisper Python n'a pas généré le fichier SRT."
+        );
+    }
+
+    console.log("Whisper Python : transcription terminée.");
+}
+
+/* =========================================================
+   TRANSCRIPTION VIDÉO
+========================================================= */
+
+app.post(
+    "/api/transcribe",
+    upload.single("video"),
+    async (req, res) => {
+
+        let videoPath = null;
+        let audioPath = null;
+        let srtPath = null;
+
+        try {
+
+            if (!req.file) {
+
+                return res.status(400).json({
+                    success: false,
+                    error: "Aucune vidéo reçue."
+                });
+
+            }
+
+            videoPath = req.file.path;
+
+            const id =
+                path.basename(
+                    req.file.filename,
+                    path.extname(req.file.filename)
+                );
+
+            audioPath =
+                path.join(
+                    OUTPUT_DIR,
+                    `${id}.wav`
+                );
+
+            srtPath =
+                path.join(
+                    OUTPUT_DIR,
+                    `${id}.srt`
+                );
+
+            console.log("");
+            console.log("🎬 Vidéo reçue :", req.file.originalname);
+
+            console.log("🎧 Extraction audio...");
+
+            await extractAudio(
+                videoPath,
+                audioPath
+            );
+
+            console.log("🧠 Transcription anglaise...");
+
+            await transcribeAudio(
+                audioPath,
+                srtPath
+            );
+
+            const srt =
+                fs.readFileSync(
+                    srtPath,
+                    "utf8"
+                );
+
+            console.log("✅ Transcription terminée.");
+
+            res.json({
+
+                success: true,
+
+                message:
+                    "Transcription anglaise terminée.",
+
+                filename:
+                    path.basename(srtPath),
+
+                subtitles:
+                    srt
+
+            });
+
+        } catch (error) {
+
+            console.error("❌ ERREUR TRANSCRIPTION");
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    error.message ||
+                    "Erreur pendant la transcription."
+
+            });
+
+        } finally {
+
+            if (
+                videoPath &&
+                fs.existsSync(videoPath)
+            ) {
+                try {
+                    fs.unlinkSync(videoPath);
+                } catch {}
+            }
+
+            if (
+                audioPath &&
+                fs.existsSync(audioPath)
+            ) {
+                try {
+                    fs.unlinkSync(audioPath);
+                } catch {}
+            }
+
+        }
+
+    }
+);
+
+
+/* =========================================================
+   TRADUCTION SRT ANGLAIS → ÉWÉ
+========================================================= */
+
+function translateSRT(subtitles) {
+
+    return new Promise((resolve, reject) => {
+
+        if (!fs.existsSync(VENV_PYTHON)) {
+
+            return reject(
+                new Error(
+                    `Python virtuel introuvable : ${VENV_PYTHON}`
+                )
+            );
+
+        }
+
+        if (!fs.existsSync(TRANSLATE_SCRIPT)) {
+
+            return reject(
+                new Error(
+                    `Script de traduction introuvable : ${TRANSLATE_SCRIPT}`
+                )
+            );
+
+        }
+
+        const input =
+            JSON.stringify(subtitles);
+
+        const child =
+            spawn(
+                VENV_PYTHON,
+                [TRANSLATE_SCRIPT],
+                {
+                    windowsHide: true
+                }
+            );
+
+        let stdout = "";
+        let stderr = "";
+
+        child.stdout.on("data", data => {
+            stdout += data.toString();
+        });
+
+        child.stderr.on("data", data => {
+            stderr += data.toString();
+            console.log(data.toString());
+        });
+
+        child.on("error", error => {
+            reject(error);
+        });
+
+        child.on("close", code => {
+
+            if (code !== 0) {
+
+                return reject(
+                    new Error(
+                        `NLLB a échoué avec le code ${code}\n${stderr}`
+                    )
+                );
+
+            }
+
+            try {
+
+                const result =
+                    JSON.parse(stdout);
+
+                resolve(result);
+
+            } catch (error) {
+
+                reject(
+                    new Error(
+                        `Réponse NLLB invalide.\n${stdout}\n${stderr}`
+                    )
+                );
+
+            }
+
+        });
+
+        child.stdin.write(input);
+        child.stdin.end();
+
+    });
+
+}
+
+
+/* =========================================================
+   PARSER SRT
+========================================================= */
+
+function parseSRT(content) {
+
+    const blocks =
+        content
+            .replace(/\r/g, "")
+            .trim()
+            .split(/\n\s*\n/);
+
+    const subtitles = [];
+
+    for (const block of blocks) {
+
+        const lines =
+            block.split("\n");
+
+        if (lines.length < 2) {
+            continue;
+        }
+
+        let timeLineIndex = 0;
+
+        if (/^\d+$/.test(lines[0].trim())) {
+            timeLineIndex = 1;
+        }
+
+        const timeLine =
+            lines[timeLineIndex];
+
+        if (
+            !timeLine ||
+            !timeLine.includes("-->")
+        ) {
+            continue;
+        }
+
+        const times =
+            timeLine.split("-->");
+
+        const start =
+            times[0].trim();
+
+        const end =
+            times[1].trim();
+
+        const text =
+            lines
+                .slice(timeLineIndex + 1)
+                .join(" ")
+                .replace(/<[^>]*>/g, "")
+                .trim();
+
+        if (!text) {
+            continue;
+        }
+
+        subtitles.push({
+            start,
+            end,
+            text
+        });
+
+    }
+
+    return subtitles;
+
+}
+
+
+/* =========================================================
+   CRÉER SRT
+========================================================= */
+
+function createSRT(subtitles) {
+
+    return subtitles
+        .map((subtitle, index) => {
+
+            return [
+                index + 1,
+                `${subtitle.start} --> ${subtitle.end}`,
+                subtitle.text,
+                ""
+            ].join("\n");
+
+        })
+        .join("\n");
+
+}
+
+
+/* =========================================================
+   API TRADUCTION
+========================================================= */
+
+app.post(
+    "/api/translate",
+    async (req, res) => {
+
+        try {
+
+            let subtitles =
+                req.body.subtitles;
+
+            if (!subtitles) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    error:
+                        "Aucun sous-titre fourni."
+
+                });
+
+            }
+
+            if (typeof subtitles === "string") {
+
+                subtitles =
+                    parseSRT(subtitles);
+
+            }
+
+            if (!Array.isArray(subtitles)) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    error:
+                        "Format de sous-titres invalide."
+
+                });
+
+            }
+
+            if (subtitles.length === 0) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    error:
+                        "Aucun dialogue à traduire."
+
+                });
+
+            }
+
+            console.log("");
+            console.log("=================================");
+            console.log("🇬🇧 → 🇹🇬 TRADUCTION NLLB");
+            console.log("=================================");
+            console.log(
+                `${subtitles.length} dialogues à traduire.`
+            );
+
+            const translated =
+                await translateSRT(subtitles);
+
+            const srtEwe =
+                createSRT(translated);
+
+            const filename =
+                `ewe-${crypto.randomBytes(8).toString("hex")}.srt`;
+
+            const outputPath =
+                path.join(
+                    OUTPUT_DIR,
+                    filename
+                );
+
+            fs.writeFileSync(
+                outputPath,
+                srtEwe,
+                "utf8"
+            );
+
+            console.log("✅ Traduction Éwé terminée.");
+
+            res.json({
+
+                success: true,
+
+                message:
+                    "Traduction Anglais → Éwé terminée.",
+
+                filename,
+
+                subtitles:
+                    translated,
+
+                srt:
+                    srtEwe
+
+            });
+
+        } catch (error) {
+
+            console.error("❌ ERREUR TRADUCTION");
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    error.message ||
+                    "Erreur pendant la traduction."
+
+            });
+
+        }
+
+    }
+);
+
+
+/* =========================================================
+   API STATUS
+========================================================= */
+
+app.get(
+    "/api/status",
+    (req, res) => {
+
+        res.json({
+
+            success: true,
+
+            application:
+                "EweVoice",
+
+            whisper:
+                fs.existsSync(
+                    WHISPER_MODEL
+                ),
+
+            ffmpeg:
+                fs.existsSync(
+                    FFMPEG_PATH
+                ),
+
+            python:
+                fs.existsSync(
+                    VENV_PYTHON
+                ),
+
+            nllb:
+                fs.existsSync(
+                    TRANSLATE_SCRIPT
+                )
+
+        });
+
+    }
+);
+
+
+/* =========================================================
+   ERREURS
+========================================================= */
+
+app.use(
+    (error, req, res, next) => {
+
+        console.error(error);
+
+        if (
+            error instanceof multer.MulterError
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                error:
+                    `Erreur upload : ${error.message}`
+
+            });
+
+        }
+
+        res.status(500).json({
+
+            success: false,
+
+            error:
+                error.message ||
+                "Erreur serveur."
+
+        });
+
+    }
+);
+
+
+/* =========================================================
+   SERVEUR
+========================================================= */
+
+app.listen(
+    PORT,
+    () => {
+
+        console.log("");
+        console.log("=================================");
+        console.log("       EWEVOICE DEMARRE");
+        console.log("=================================");
+        console.log(
+            `Site : http://localhost:${PORT}`
+        );
+
+        console.log(
+            `FFmpeg : ${
+                fs.existsSync(FFMPEG_PATH)
+                    ? "OK"
+                    : "INTROUVABLE"
+            }`
+        );
+
+        console.log(
+            `Whisper : ${
+                fs.existsSync(WHISPER_MODEL)
+                    ? "OK"
+                    : "INTROUVABLE"
+            }`
+        );
+
+        console.log(
+            `Python : ${
+                fs.existsSync(VENV_PYTHON)
+                    ? "OK"
+                    : "INTROUVABLE"
+            }`
+        );
+
+        console.log(
+            `NLLB : ${
+                fs.existsSync(TRANSLATE_SCRIPT)
+                    ? "OK"
+                    : "INTROUVABLE"
+            }`
+        );
+
+        console.log("");
+
+    }
+);
+/* =========================================================
+   API DOUBLAGE VIDEO COMPLET — EWE
+========================================================= */
+
+app.post(
+    "/api/dub-video",
+    upload.single("video"),
+    async (req, res) => {
+
+        let videoPath = null;
+        let englishSrt = null;
+        let eweSrt = null;
+        let eweAudio = null;
+        let finalVideo = null;
+
+        try {
+
+            if (!req.file) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Aucune vidéo reçue."
+                });
+            }
+
+            videoPath = req.file.path;
+
+            const id = path.basename(
+                req.file.filename,
+                path.extname(req.file.filename)
+            );
+
+            englishSrt = path.join(
+                OUTPUT_DIR,
+                `${id}-english.srt`
+            );
+
+            eweSrt = path.join(
+                OUTPUT_DIR,
+                `${id}-ewe.srt`
+            );
+
+            eweAudio = path.join(
+                OUTPUT_DIR,
+                `${id}-ewe.wav`
+            );
+
+            finalVideo = path.join(
+                OUTPUT_DIR,
+                `${id}-EWE.mp4`
+            );
+
+            console.log("");
+            console.log("=================================");
+            console.log("DOUBLAGE EWEVOICE");
+            console.log("=================================");
+
+            /* 1 — AUDIO + WHISPER */
+
+            console.log("1/4 Transcription anglaise...");
+
+            const audioPath = path.join(
+                OUTPUT_DIR,
+                `${id}-source.wav`
+            );
+
+            await extractAudio(
+                videoPath,
+                audioPath
+            );
+
+            await transcribeAudio(
+                audioPath,
+                englishSrt
+            );
+
+            if (fs.existsSync(audioPath)) {
+                fs.unlinkSync(audioPath);
+            }
+
+            /* 2 — TRADUCTION ÉWÉ */
+
+            console.log("2/4 Traduction anglaise → Éwé...");
+
+            await runPython(
+                "translate_srt.py",
+                [
+                    englishSrt,
+                    eweSrt
+                ]
+            );
+
+            if (!fs.existsSync(eweSrt)) {
+                throw new Error(
+                    "Le SRT Éwé n'a pas été généré."
+                );
+            }
+
+            /* 3 — VOIX ÉWÉ */
+
+            console.log("3/4 Génération de la voix Éwé...");
+
+            await runPython(
+                "dub_ewe.py",
+                [
+                    eweSrt,
+                    eweAudio
+                ]
+            );
+
+            if (!fs.existsSync(eweAudio)) {
+                throw new Error(
+                    "La voix Éwé n'a pas été générée."
+                );
+            }
+
+            /* 4 — RENDU VIDEO */
+
+            console.log("4/4 Rendu de la vidéo finale...");
+
+            await runPython(
+                "render_video.py",
+                [
+                    videoPath,
+                    eweAudio,
+                    finalVideo
+                ]
+            );
+
+            if (!fs.existsSync(finalVideo)) {
+                throw new Error(
+                    "La vidéo finale n'a pas été créée."
+                );
+            }
+
+            console.log("");
+            console.log("=================================");
+            console.log("VIDEO EWEVOICE TERMINEE");
+            console.log("=================================");
+
+            res.json({
+
+                success: true,
+
+                message:
+                    "Vidéo doublée en Éwé terminée.",
+
+                video:
+                    `/outputs/${path.basename(finalVideo)}`,
+
+                english_srt:
+                    `/outputs/${path.basename(englishSrt)}`,
+
+                ewe_srt:
+                    `/outputs/${path.basename(eweSrt)}`,
+
+                audio:
+                    `/outputs/${path.basename(eweAudio)}`
+
+            });
+
+        } catch (error) {
+
+            console.error("");
+            console.error(
+                "❌ ERREUR DOUBLAGE"
+            );
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    error.message ||
+                    "Erreur pendant le doublage."
+
+            });
+
+        } finally {
+
+            /*
+             * On conserve les fichiers de sortie.
+             * On supprime seulement la vidéo temporaire.
+             */
+
+            if (
+                videoPath &&
+                fs.existsSync(videoPath)
+            ) {
+                try {
+                    fs.unlinkSync(videoPath);
+                } catch {}
+            }
+
+        }
+
+    }
+);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+========== transcribe.py ==========
+
+import sys
+import whisper
+
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: python transcribe.py audio.wav sortie.srt")
+        sys.exit(1)
+
+    audio = sys.argv[1]
+    output = sys.argv[2]
+
+    print("Chargement de Whisper...")
+
+    model = whisper.load_model("base")
+
+    print("Transcription en cours...")
+
+    result = model.transcribe(
+        audio,
+        task="transcribe",
+        fp16=False
+    )
+
+    with open(output, "w", encoding="utf-8") as f:
+        for i, segment in enumerate(result["segments"], 1):
+            start = segment["start"]
+            end = segment["end"]
+            text = segment["text"].strip()
+
+            def timestamp(seconds):
+                hours = int(seconds // 3600)
+                minutes = int((seconds % 3600) // 60)
+                secs = int(seconds % 60)
+                millis = int(round((seconds - int(seconds)) * 1000))
+
+                if millis >= 1000:
+                    secs += 1
+                    millis = 0
+
+                return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+            f.write(f"{i}\n")
+            f.write(f"{timestamp(start)} --> {timestamp(end)}\n")
+            f.write(f"{text}\n\n")
+
+    print("TRANSCRIPTION TERMINEE")
+    print(f"Fichier : {output}")
+
+if __name__ == "__main__":
+    main()
+
+
+
+========== translate.py ==========
+
+import sys
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+MODEL_NAME = "facebook/nllb-200-distilled-600M"
+
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+
+def translate(text):
+    tokenizer.src_lang = "eng_Latn"
+
+    inputs = tokenizer(
+        text,
+        return_tensors="pt",
+        padding=True,
+        truncation=True
+    )
+
+    forced_bos_token_id = tokenizer.convert_tokens_to_ids("ewe_Latn")
+
+    translated_tokens = model.generate(
+        **inputs,
+        forced_bos_token_id=forced_bos_token_id,
+        max_length=256
+    )
+
+    return tokenizer.batch_decode(
+        translated_tokens,
+        skip_special_tokens=True
+    )[0]
+
+if __name__ == "__main__":
+    text = " ".join(sys.argv[1:]).strip()
+
+    if not text:
+        print("Texte anglais manquant.", file=sys.stderr)
+        sys.exit(1)
+
+    print(translate(text))
+
+
+
+========== translate_srt.py ==========
+
+import sys
+import re
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+MODEL_NAME = "facebook/nllb-200-distilled-600M"
+
+def parse_srt(path):
+    text = open(path, "r", encoding="utf-8-sig").read()
+    blocks = re.split(r"\n\s*\n", text.strip())
+    results = []
+
+    for block in blocks:
+        lines = block.splitlines()
+        if len(lines) < 3:
+            continue
+
+        parts = lines[1].split(" --> ")
+        if len(parts) != 2:
+            continue
+
+        results.append((parts[0], parts[1], " ".join(lines[2:]).strip()))
+
+    return results
+
+def main():
+    if len(sys.argv) < 4:
+        print("Usage: python translate_srt.py input.srt output.srt langue")
+        sys.exit(1)
+
+    input_srt, output_srt, target = sys.argv[1:4]
+
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+
+    tokenizer.src_lang = "eng_Latn"
+
+    target_id = tokenizer.convert_tokens_to_ids(
+        "fra_Latn" if target == "fr" else "ewe_Latn"
+    )
+
+    segments = parse_srt(input_srt)
+    output = []
+
+    for i, (start, end, text) in enumerate(segments, 1):
+        print(f"TRADUCTION {i}/{len(segments)}", flush=True)
+
+        inputs = tokenizer(
+            text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512
+        )
+
+        result = model.generate(
+            **inputs,
+            forced_bos_token_id=target_id,
+            max_length=512
+        )
+
+        translated = tokenizer.decode(
+            result[0],
+            skip_special_tokens=True
+        )
+
+        output.append(
+            f"{i}\n{start} --> {end}\n{translated}\n"
+        )
+
+    with open(output_srt, "w", encoding="utf-8") as f:
+        f.write("\n".join(output))
+
+    print("TRADUCTION TERMINEE", flush=True)
+
+if __name__ == "__main__":
+    main()
+
+
+
+========== render_video.py ==========
+
+import sys
+import os
+import subprocess
+
+FFMPEG = os.environ.get("FFMPEG_PATH", "ffmpeg")
+
+def main():
+    if len(sys.argv) < 4:
+        print("Usage: python render_video.py video.mp4 audio.wav sortie.mp4")
+        sys.exit(1)
+
+    video = os.path.abspath(sys.argv[1])
+    audio = os.path.abspath(sys.argv[2])
+    output = os.path.abspath(sys.argv[3])
+
+    if not os.path.exists(video):
+        raise FileNotFoundError(f"Vidéo introuvable : {video}")
+
+    if not os.path.exists(audio):
+        raise FileNotFoundError(f"Audio Éwé introuvable : {audio}")
+
+    os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
+
+    cmd = [
+        FFMPEG,
+        "-y",
+        "-i", video,
+        "-i", audio,
+        "-map", "0:v:0",
+        "-map", "1:a:0",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
+        output
+    ]
+
+    print("=================================")
+    print("RENDU VIDEO EWEVOICE")
+    print("=================================")
+
+    result = subprocess.run(cmd)
+
+    if result.returncode != 0:
+        raise RuntimeError("FFmpeg a échoué pendant le rendu vidéo.")
+
+    print("")
+    print("=================================")
+    print("VIDEO EWE TERMINEE")
+    print("=================================")
+    print(f"Fichier : {output}")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+========== dub_ewe.py ==========
+
+import sys
+import os
+import re
+import numpy as np
+import soundfile as sf
+import torch
+from transformers import VitsModel, AutoTokenizer
+
+MODEL_DIR = "models/mms-tts-ewe"
+
+def parse_srt(path):
+    text = open(path, "r", encoding="utf-8-sig").read()
+    blocks = re.split(r"\n\s*\n", text.strip())
+    segments = []
+
+    for block in blocks:
+        lines = block.splitlines()
+        if len(lines) < 3:
+            continue
+
+        timing = lines[1]
+        match = re.match(
+            r"(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})",
+            timing
+        )
+
+        if not match:
+            continue
+
+        v = list(map(int, match.groups()))
+
+        start = v[0]*3600 + v[1]*60 + v[2] + v[3]/1000
+        end = v[4]*3600 + v[5]*60 + v[6] + v[7]/1000
+
+        subtitle = " ".join(lines[2:]).strip()
+
+        if subtitle:
+            segments.append((start, end, subtitle))
+
+    return segments
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python dub_ewe.py fichier.srt [sortie.wav]")
+        sys.exit(1)
+
+    srt_path = sys.argv[1]
+    output_path = sys.argv[2] if len(sys.argv) > 2 else "outputs/ewe-dub.wav"
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
+    print("Chargement du modèle TTS Éwé...")
+
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
+    model = VitsModel.from_pretrained(MODEL_DIR)
+
+    sample_rate = model.config.sampling_rate
+
+    segments = parse_srt(srt_path)
+
+    if not segments:
+        raise RuntimeError("Aucun segment SRT trouvé.")
+
+    total_duration = max(end for _, end, _ in segments)
+
+    final_audio = np.zeros(
+        int((total_duration + 1) * sample_rate),
+        dtype=np.float32
+    )
+
+    print(f"{len(segments)} segments à générer.")
+
+    for index, (start, end, text) in enumerate(segments, 1):
+
+        print(f"[{index}/{len(segments)}] {text}")
+
+        inputs = tokenizer(
+            text,
+            return_tensors="pt"
+        )
+
+        with torch.no_grad():
+            waveform = model(**inputs).waveform
+
+        audio = waveform.squeeze().cpu().numpy()
+
+        max_duration = end - start
+        max_samples = int(max_duration * sample_rate)
+
+        if len(audio) > max_samples:
+            audio = audio[:max_samples]
+
+        position = int(start * sample_rate)
+
+        available = len(final_audio) - position
+        length = min(len(audio), available)
+
+        if length > 0:
+            final_audio[position:position+length] += audio[:length]
+
+    peak = np.max(np.abs(final_audio))
+
+    if peak > 0.95:
+        final_audio = final_audio / peak * 0.95
+
+    sf.write(
+        output_path,
+        final_audio,
+        sample_rate
+    )
+
+    print("")
+    print("=================================")
+    print("DOUBLAGE EWE AUDIO TERMINE")
+    print("=================================")
+    print(f"Fichier : {output_path}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+========== tts_ewe.py ==========
+
+import sys
+import torch
+import soundfile as sf
+from transformers import VitsModel, AutoTokenizer
+
+MODEL_DIR = "models/mms-tts-ewe"
+
+if len(sys.argv) < 2:
+    print("Usage: python tts_ewe.py \"texte Ewe\" [sortie.wav]")
+    sys.exit(1)
+
+text = sys.argv[1]
+output = sys.argv[2] if len(sys.argv) >= 3 else "outputs/voice_ewe.wav"
+
+tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
+model = VitsModel.from_pretrained(MODEL_DIR)
+
+inputs = tokenizer(text, return_tensors="pt")
+
+with torch.no_grad():
+    output_waveform = model(**inputs).waveform
+
+audio = output_waveform.squeeze().cpu().numpy()
+
+sf.write(
+    output,
+    audio,
+    model.config.sampling_rate
+)
+
+print(f"VOIX EWE CREEE : {output}")
+
+
+
+========== dubbing-module.txt ==========
+
+const fs = require("fs");
+const path = require("path");
+const { spawn } = require("child_process");
+
+/*
+ * EweVoice — module de doublage vidéo
+ * À intégrer dans server.js
+ */
+
+const PYTHON_PATH = path.join(ROOT, ".venv", "Scripts", "python.exe");
+
+function runPython(script, args = []) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(
+            PYTHON_PATH,
+            [path.join(ROOT, script), ...args],
+            { windowsHide: true }
+        );
+
+        let stdout = "";
+        let stderr = "";
+
+        child.stdout.on("data", data => {
+            stdout += data.toString();
+            console.log(data.toString());
+        });
+
+        child.stderr.on("data", data => {
+            stderr += data.toString();
+            console.error(data.toString());
+        });
+
+        child.on("error", reject);
+
+        child.on("close", code => {
+            if (code === 0) {
+                resolve({ stdout, stderr });
+            } else {
+                reject(
+                    new Error(
+                        `${script} a échoué avec le code ${code}\n${stderr}`
+                    )
+                );
+            }
+        });
+    });
+}
+
+
+
+========== public\index.html ==========
+
+<!DOCTYPE html>
+
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EweVoice — Traduction vidéo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+```
+<header>
+    <h1>🎙️ EweVoice</h1>
+    <p>Traduction et doublage vidéo automatique</p>
+</header>
+
+<main>
+
+    <section class="card">
+
+        <h2>🎬 Choisir une vidéo</h2>
+
+        <input
+            type="file"
+            id="videoInput"
+            accept="video/*"
+        >
+
+        <div id="videoInfo"></div>
+
+        <div id="videoContainer"></div>
+
+    </section>
+
+
+    <section class="card">
+
+        <h2>🌍 Langue de traduction</h2>
+
+        <select id="targetLanguage">
+
+            <option value="ewe">🇹🇬 Éwé</option>
+
+            <option value="fr">🇫🇷 Français</option>
+
+        </select>
+
+    </section>
+
+
+    <section class="card">
+
+        <h2>🎙️ Type de voix</h2>
+
+        <select id="voiceType">
+
+            <option value="female">
+                👩 Femme adulte
+            </option>
+
+            <option value="male">
+                👨 Homme adulte
+            </option>
+
+            <option value="young-female">
+                👧 Jeune fille
+            </option>
+
+            <option value="young-male">
+                👦 Jeune homme
+            </option>
+
+            <option value="adult">
+                🧑 Adulte
+            </option>
+
+        </select>
+
+    </section>
+
+
+    <section class="card">
+
+        <button
+            id="processButton"
+            disabled
+        >
+            🚀 Traduire et doubler la vidéo
+        </button>
+
+        <div id="status">
+            Sélectionnez une vidéo pour commencer.
+        </div>
+
+    </section>
+
+
+    <section
+        class="card"
+        id="resultSection"
+        style="display:none;"
+    >
+
+        <h2>✅ Vidéo terminée</h2>
+
+        <video
+            id="resultVideo"
+            controls
+            playsinline
+        ></video>
+
+        <br><br>
+
+        <a
+            id="downloadButton"
+            class="download-button"
+            download
+        >
+            ⬇️ Télécharger la vidéo traduite
+        </a>
+
+    </section>
+
+</main>
+```
+
+</div>
+
+<script src="app.js"></script>
+
+</body>
+</html>
+
+
+
+========== public\app.js ==========
+
+const videoInput = document.getElementById("videoInput");
+const videoContainer = document.getElementById("videoContainer");
+const videoInfo = document.getElementById("videoInfo");
+const processButton = document.getElementById("processButton");
+const status = document.getElementById("status");
+const voiceType = document.getElementById("voiceType");
+const targetLanguage = document.getElementById("targetLanguage");
+const resultSection = document.getElementById("resultSection");
+const resultVideo = document.getElementById("resultVideo");
+const downloadButton = document.getElementById("downloadButton");
+
+let selectedVideo = null;
+
+videoInput.addEventListener("change", () => {
+
+    const file = videoInput.files[0];
+
+    if (!file) {
+        selectedVideo = null;
+        processButton.disabled = true;
+        return;
+    }
+
+    selectedVideo = file;
+
+    videoContainer.innerHTML = "";
+
+    const video = document.createElement("video");
+
+    video.controls = true;
+    video.preload = "metadata";
+    video.playsInline = true;
+    video.src = URL.createObjectURL(file);
+
+    videoContainer.appendChild(video);
+
+    videoInfo.textContent =
+        `Vidéo sélectionnée : ${file.name}`;
+
+    status.innerHTML = `
+        <div class="progress-wrapper">
+            <div class="progress-title">✅ Vidéo prête</div>
+            <div class="progress-text">
+                Choisissez la langue et la voix, puis lancez la traduction.
+            </div>
+        </div>
+    `;
+
+    processButton.disabled = false;
+
+    if (resultSection) {
+        resultSection.style.display = "none";
+    }
+});
+
+
+function afficherProgression(etape, titre, message, pourcentage) {
+
+    status.innerHTML = `
+
+        <div class="progress-wrapper">
+
+            <div class="progress-header">
+                <strong>${etape}</strong>
+                <span>${pourcentage}%</span>
+            </div>
+
+            <div class="progress-bar">
+                <div
+                    class="progress-fill"
+                    style="width:${pourcentage}%"
+                ></div>
+            </div>
+
+            <div class="progress-title">
+                ${titre}
+            </div>
+
+            <div class="progress-text">
+                ${message}
+            </div>
+
+        </div>
+    `;
+}
+
+
+processButton.addEventListener("click", async () => {
+
+    if (!selectedVideo) {
+        status.textContent =
+            "⚠️ Sélectionnez une vidéo.";
+        return;
+    }
+
+    processButton.disabled = true;
+
+    const selectedVoice =
+        voiceType?.value || "adult";
+
+    const selectedLanguage =
+        targetLanguage?.value || "fr";
+
+    const formData = new FormData();
+
+    formData.append("video", selectedVideo);
+    formData.append("voice", selectedVoice);
+    formData.append("targetLanguage", selectedLanguage);
+
+
+    afficherProgression(
+        "1/4",
+        "🧠 Analyse de la vidéo",
+        "Extraction de la piste audio et transcription de la parole...",
+        25
+    );
+
+
+    try {
+
+        const response = await fetch(
+            "/api/dub-video",
+            {
+                method: "POST",
+                body: formData
+            }
+        );
+
+
+        if (!response.ok) {
+
+            let errorMessage =
+                "La traduction a échoué.";
+
+            try {
+
+                const errorData =
+                    await response.json();
+
+                errorMessage =
+                    errorData.error || errorMessage;
+
+            } catch (_) {}
+
+            throw new Error(errorMessage);
+        }
+
+
+        /*
+         * Le serveur effectue actuellement
+         * les différentes opérations avant
+         * de retourner le résultat final.
+         *
+         * L'interface présente donc les étapes
+         * pendant le traitement de la réponse.
+         */
+
+        afficherProgression(
+            "2/4",
+            "🌍 Traduction",
+            `Traduction automatique vers ${
+                selectedLanguage === "fr"
+                    ? "le français"
+                    : "l'éwé"
+            }...`,
+            50
+        );
+
+
+        const data = await response.json();
+
+
+        if (!data.success) {
+
+            throw new Error(
+                data.error ||
+                "La traduction a échoué."
+            );
+        }
+
+
+        afficherProgression(
+            "3/4",
+            "🎙️ Génération de la voix",
+            "Création de la nouvelle piste audio avec la voix sélectionnée...",
+            75
+        );
+
+
+        await new Promise(
+            resolve => setTimeout(resolve, 500)
+        );
+
+
+        afficherProgression(
+            "4/4",
+            "🎬 Création de la vidéo finale",
+            "Remplacement de l'audio original et finalisation de la vidéo...",
+            90
+        );
+
+
+        if (!data.video) {
+
+            throw new Error(
+                "La vidéo finale n'a pas été retournée par le serveur."
+            );
+        }
+
+
+        afficherResultat(data.video);
+
+
+        afficherProgression(
+            "✓",
+            "🎉 Traduction terminée",
+            "La vidéo est prête. Vous pouvez maintenant la regarder ou la télécharger.",
+            100
+        );
+
+
+    } catch (error) {
+
+        console.error(error);
+
+        status.innerHTML = `
+            <div class="error-message">
+                ❌ ${error.message}
+            </div>
+        `;
+
+    } finally {
+
+        processButton.disabled = false;
+
+    }
+
+});
+
+
+function afficherResultat(videoURL) {
+
+    if (!resultSection ||
+        !resultVideo ||
+        !downloadButton) {
+
+        return;
+    }
+
+
+    resultSection.style.display = "block";
+
+
+    resultVideo.src = videoURL;
+
+
+    downloadButton.href = videoURL;
+
+    downloadButton.download =
+        "EweVoice-video-traduite.mp4";
+
+
+    resultSection.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+    });
+
+}
+
+
+
+========== public\style.css ==========
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #eef2ff, #f8fafc);
+    padding: 25px 15px;
+    color: #1f2937;
+}
+
+.app {
+    width: 100%;
+    max-width: 850px;
+    margin: auto;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 42px;
+}
+
+header p {
+    margin-top: 8px;
+    color: #6b7280;
+    font-size: 18px;
+}
+
+.card {
+    background: white;
+    border-radius: 20px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.10);
+}
+
+.card h2 {
+    margin-top: 0;
+    font-size: 22px;
+}
+
+input[type="file"] {
+    width: 100%;
+    padding: 15px;
+    border: 2px dashed #9ca3af;
+    border-radius: 14px;
+    background: #f9fafb;
+    cursor: pointer;
+}
+
+.video-container {
+    margin-top: 20px;
+    min-height: 180px;
+    border-radius: 15px;
+    background: #111827;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    color: white;
+}
+
+.video-container video {
+    width: 100%;
+    max-height: 450px;
+    display: block;
+}
+
+.video-info {
+    margin-top: 10px;
+    color: #6b7280;
+}
+
+.languages {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 25px;
+    font-size: 22px;
+    font-weight: bold;
+}
+
+.arrow {
+    font-size: 30px;
+}
+
+.subtitle-box {
+    margin-top: 15px;
+    min-height: 120px;
+    padding: 20px;
+    border: 2px solid #e5e7eb;
+    border-radius: 15px;
+    background: #f9fafb;
+    line-height: 1.6;
+    font-size: 18px;
+}
+
+select {
+    width: 100%;
+    padding: 15px;
+    border-radius: 12px;
+    border: 2px solid #d1d5db;
+    font-size: 17px;
+    background: white;
+}
+
+#processButton {
+    width: 100%;
+    border: none;
+    border-radius: 50px;
+    padding: 18px;
+    font-size: 18px;
+    font-weight: bold;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+    margin-bottom: 15px;
+}
+
+#processButton:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+}
+
+.status {
+    text-align: center;
+    padding: 10px;
+    color: #6b7280;
+}
+
+@media (max-width: 600px) {
+
+    body {
+        padding: 15px 10px;
+    }
+
+    header h1 {
+        font-size: 32px;
+    }
+
+    .card {
+        padding: 18px;
+    }
+
+    .languages {
+        gap: 12px;
+        font-size: 18px;
+    }
+
+    .arrow {
+        font-size: 24px;
+    }
+}
+.subtitle-row {
+    display: grid;
+    grid-template-columns: 45px 150px 1fr;
+    gap: 10px;
+    align-items: start;
+    padding: 12px 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.subtitle-row:last-child {
+    border-bottom: none;
+}
+
+.subtitle-time {
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.subtitle-dialogue {
+    font-size: 17px;
+    font-weight: 500;
+    color: #111827;
+    text-align: left;
+}
+
+@media (max-width: 600px) {
+
+    .subtitle-row {
+        grid-template-columns: 35px 1fr;
+    }
+
+    .subtitle-time {
+        grid-column: 2;
+    }
+
+    .subtitle-dialogue {
+        grid-column: 2;
+    }
+}
+

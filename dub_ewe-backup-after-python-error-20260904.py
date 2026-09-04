@@ -41,6 +41,7 @@ def run(command):
 
 
 def duration(path):
+
     output = run([
         "ffprobe",
         "-v", "error",
@@ -54,6 +55,7 @@ def duration(path):
 
 
 def tempo_filter(ratio):
+
     filters = []
 
     while ratio > 2.0:
@@ -72,31 +74,47 @@ def tempo_filter(ratio):
 
 
 def get_voice_settings(voice_preset):
-    preset = str(
-        voice_preset or "current"
-    ).strip().lower()
+
+    preset = (
+        str(voice_preset or "current")
+        .strip()
+        .lower()
+    )
+
+    /*
+     * pitch_factor
+     *
+     * 1.00 = voix actuelle
+     * <1.00 = plus grave
+     * >1.00 = plus aiguë
+     */
 
     settings = {
         "current": {
             "pitch": 1.00,
             "label": "Voix Éwé actuelle"
         },
+
         "male": {
             "pitch": 0.88,
             "label": "Voix masculine"
         },
+
         "female": {
             "pitch": 1.10,
             "label": "Voix féminine"
         },
+
         "young": {
             "pitch": 1.06,
             "label": "Voix jeune"
         },
+
         "child": {
             "pitch": 1.22,
             "label": "Voix enfant"
         },
+
         "my-voice": {
             "pitch": 1.00,
             "label": "Ma propre voix"
@@ -114,6 +132,7 @@ def apply_voice_preset(
     target,
     voice_preset
 ):
+
     settings = get_voice_settings(
         voice_preset
     )
@@ -122,7 +141,19 @@ def apply_voice_preset(
         settings["pitch"]
     )
 
+    /*
+     * La voix de référence personnelle
+     * est reçue et validée par la chaîne serveur.
+     *
+     * Le modèle MMS Éwé actuel ne permet cependant
+     * pas encore de faire du clonage vocal réel.
+     *
+     * Pour "my-voice", on conserve donc le timbre
+     * naturel du modèle sans prétendre l'imiter.
+     */
+
     if abs(pitch - 1.0) < 0.001:
+
         run([
             "ffmpeg",
             "-y",
@@ -131,7 +162,15 @@ def apply_voice_preset(
             "-ac", "2",
             target
         ])
+
         return
+
+    /*
+     * asetrate modifie la hauteur.
+     *
+     * atempo compense ensuite la variation de vitesse
+     * afin de conserver approximativement la durée.
+     */
 
     filter_chain = (
         f"asetrate=44100*{pitch:.6f},"
@@ -155,6 +194,7 @@ def fit_audio_naturally(
     target,
     target_duration
 ):
+
     actual = duration(source)
 
     if actual <= 0:
@@ -169,7 +209,13 @@ def fit_audio_naturally(
 
     ratio = actual / target_duration
 
+    /*
+     * Zone confortable :
+     * on ajuste normalement.
+     */
+
     if 0.82 <= ratio <= 1.22:
+
         filter_chain = tempo_filter(
             ratio
         )
@@ -188,8 +234,17 @@ def fit_audio_naturally(
 
         return
 
+    /*
+     * Si le texte généré est beaucoup trop long,
+     * on évite une accélération excessive.
+     */
+
     if ratio > 1.22:
-        safe_ratio = 1.22
+
+        safe_ratio = min(
+            ratio,
+            1.22
+        )
 
         filter_chain = tempo_filter(
             safe_ratio
@@ -208,10 +263,6 @@ def fit_audio_naturally(
         current = duration(target)
 
         if current > target_duration:
-            trimmed = (
-                target +
-                ".trim.wav"
-            )
 
             run([
                 "ffmpeg",
@@ -221,65 +272,77 @@ def fit_audio_naturally(
                 f"{target_duration:.3f}",
                 "-ar", "44100",
                 "-ac", "2",
-                trimmed
+                target + ".trim.wav"
             ])
 
             shutil.move(
-                trimmed,
+                target + ".trim.wav",
                 target
             )
 
         return
 
-    safe_ratio = 0.82
+    /*
+     * Si le texte généré est beaucoup trop court,
+     * on évite de ralentir excessivement.
+     *
+     * Le reste de l'intervalle devient du silence.
+     */
 
-    filter_chain = tempo_filter(
-        safe_ratio
-    )
+    if ratio < 0.82:
 
-    run([
-        "ffmpeg",
-        "-y",
-        "-i", source,
-        "-af", filter_chain,
-        "-ar", "44100",
-        "-ac", "2",
-        target
-    ])
-
-    current = duration(target)
-
-    if current < target_duration:
-        padded = (
-            target +
-            ".pad.wav"
+        safe_ratio = max(
+            ratio,
+            0.82
         )
 
-        padding = max(
-            0.0,
-            target_duration - current
+        filter_chain = tempo_filter(
+            safe_ratio
         )
 
         run([
             "ffmpeg",
             "-y",
-            "-i", target,
-            "-af",
-            f"apad=pad_dur={padding:.3f}",
-            "-t",
-            f"{target_duration:.3f}",
+            "-i", source,
+            "-af", filter_chain,
             "-ar", "44100",
             "-ac", "2",
-            padded
+            target
         ])
 
-        shutil.move(
-            padded,
-            target
-        )
+        current = duration(target)
+
+        if current < target_duration:
+
+            padded = (
+                target +
+                ".pad.wav"
+            )
+
+            run([
+                "ffmpeg",
+                "-y",
+                "-i", target,
+                "-af",
+                f"apad=pad_dur={target_duration - current:.3f}",
+                "-t",
+                f"{target_duration:.3f}",
+                "-ar", "44100",
+                "-ac", "2",
+                padded
+            ])
+
+            shutil.move(
+                padded,
+                target
+            )
 
 
-def create_silence(path, seconds):
+def create_silence(
+    path,
+    seconds
+):
+
     if seconds <= 0:
         return
 
@@ -303,12 +366,14 @@ def generate_tts(
     text,
     output
 ):
+
     inputs = tokenizer(
         text,
         return_tensors="pt"
     )
 
     with torch.no_grad():
+
         waveform = model(
             **inputs
         ).waveform
@@ -334,14 +399,17 @@ def make_timeline(
     voice_preset="current",
     voice_reference_path=""
 ):
+
     work = tempfile.mkdtemp(
         prefix="ewevoice_"
     )
 
     try:
-        voice_settings = get_voice_settings(
-            voice_preset
-        )
+
+        voice_settings =
+            get_voice_settings(
+                voice_preset
+            )
 
         print(
             json.dumps({
@@ -362,12 +430,18 @@ def make_timeline(
             flush=True
         )
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            MODEL_DIR
+        tokenizer = (
+            AutoTokenizer
+            .from_pretrained(
+                MODEL_DIR
+            )
         )
 
-        model = VitsModel.from_pretrained(
-            MODEL_DIR
+        model = (
+            VitsModel
+            .from_pretrained(
+                MODEL_DIR
+            )
         )
 
         model.eval()
@@ -379,26 +453,35 @@ def make_timeline(
         )
 
         if (
-            voice_preset == "my-voice"
-            and voice_reference_path
+            voice_preset == "my-voice" and
+            voice_reference_path
         ):
+
             if os.path.exists(
                 voice_reference_path
             ):
+
                 print(
-                    "Reference vocale personnelle recue.",
-                    file=sys.stderr,
-                    flush=True
-                )
-            else:
-                print(
-                    "Reference vocale introuvable.",
+                    "Reference vocale personnelle reçue.",
                     file=sys.stderr,
                     flush=True
                 )
 
+            else:
+
+                print(
+                    "Reference vocale introuvable : utilisation de la voix Ewe actuelle.",
+                    file=sys.stderr,
+                    flush=True
+                )
+
+        pieces = []
+
+        current = 0.0
+
         valid_segments = [
-            s for s in segments
+            s
+            for s in segments
             if str(
                 s.get("text", "")
             ).strip()
@@ -409,16 +492,15 @@ def make_timeline(
         )
 
         if total == 0:
+
             raise RuntimeError(
                 "Aucun segment audio Ewe."
             )
 
-        pieces = []
-        current = 0.0
-
         for index, segment in enumerate(
             valid_segments
         ):
+
             start = float(
                 segment["start"]
             )
@@ -454,6 +536,10 @@ def make_timeline(
                 f"adjusted_{index}.wav"
             )
 
+            /*
+             * Génération de la parole Éwé.
+             */
+
             generate_tts(
                 model,
                 tokenizer,
@@ -461,11 +547,19 @@ def make_timeline(
                 raw
             )
 
+            /*
+             * Application du preset vocal.
+             */
+
             apply_voice_preset(
                 raw,
                 voiced,
                 voice_preset
             )
+
+            /*
+             * Ajustement temporel naturel.
+             */
 
             fit_audio_naturally(
                 voiced,
@@ -473,12 +567,17 @@ def make_timeline(
                 segment_duration
             )
 
+            /*
+             * Silence entre deux segments.
+             */
+
             gap = max(
                 0.0,
                 start - current
             )
 
             if gap > 0:
+
                 silence = os.path.join(
                     work,
                     f"silence_{index}.wav"
@@ -516,7 +615,10 @@ def make_timeline(
                 json.dumps({
                     "type": "progress",
                     "progress":
-                        min(progress, 95),
+                        min(
+                            progress,
+                            95
+                        ),
                     "stage":
                         "generating_ewe_audio",
                     "segment":
@@ -535,6 +637,7 @@ def make_timeline(
         )
 
         if trailing > 0:
+
             silence = os.path.join(
                 work,
                 "trailing_silence.wav"
@@ -559,10 +662,15 @@ def make_timeline(
             "w",
             encoding="utf-8"
         ) as f:
+
             for piece in pieces:
+
                 safe = (
                     piece
-                    .replace("\\", "/")
+                    .replace(
+                        "\\",
+                        "/"
+                    )
                     .replace(
                         "'",
                         "'\\''"
@@ -572,6 +680,10 @@ def make_timeline(
                 f.write(
                     f"file '{safe}'\n"
                 )
+
+        /*
+         * Construction du fichier audio Éwé final.
+         */
 
         run([
             "ffmpeg",
@@ -594,13 +706,16 @@ def make_timeline(
                 "progress": 100,
                 "stage": "complete",
                 "output": output,
-                "duration": total_duration,
-                "voicePreset": voice_preset
+                "duration":
+                    total_duration,
+                "voicePreset":
+                    voice_preset
             }, ensure_ascii=False),
             flush=True
         )
 
     finally:
+
         shutil.rmtree(
             work,
             ignore_errors=True
@@ -608,7 +723,9 @@ def make_timeline(
 
 
 def main():
+
     if len(sys.argv) < 4:
+
         print(
             "Usage: python dub_ewe.py "
             "segments.json output.mp3 "
@@ -616,6 +733,7 @@ def main():
             "[voicePreset] "
             "[voiceReferencePath]"
         )
+
         sys.exit(1)
 
     segments_file = sys.argv[1]
@@ -643,6 +761,7 @@ def main():
         "r",
         encoding="utf-8"
     ) as f:
+
         segments = json.load(f)
 
     make_timeline(

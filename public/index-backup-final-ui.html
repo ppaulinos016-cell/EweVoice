@@ -1,0 +1,149 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>EweVoice - Doublage Anglais → Éwé</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<main class="app">
+
+    <header>
+        <h1>🎙️ EweVoice</h1>
+        <p>Doublage vidéo Anglais → Éwé</p>
+    </header>
+
+
+    <section class="card">
+
+        <h2>🎬 Vidéo anglaise</h2>
+
+        <input
+            type="file"
+            id="videoInput"
+            accept="video/*"
+        >
+
+        <div id="videoContainer" class="video-container">
+            <p>Aucune vidéo sélectionnée</p>
+        </div>
+
+        <div id="videoInfo" class="video-info"></div>
+
+    </section>
+
+
+    <section class="card">
+
+        <h2>📝 Sous-titres anglais</h2>
+
+        <p>
+            Sélectionne un fichier
+            <strong>.SRT</strong> ou <strong>.VTT</strong>
+            si la vidéo en possède un.
+        </p>
+
+        <input
+            type="file"
+            id="subtitleInput"
+            accept=".srt,.vtt,text/vtt"
+        >
+
+        <div id="subtitleStatus" class="status">
+            Aucun sous-titre sélectionné.
+        </div>
+
+        <div id="subtitleText" class="subtitle-box">
+            Les sous-titres anglais apparaîtront ici.
+        </div>
+
+    </section>
+
+
+    <section class="card">
+
+        <h2>🇬🇧 → 🇹🇬</h2>
+
+        <div class="languages">
+
+            <div>
+                🇬🇧<br>
+                Anglais
+            </div>
+
+            <div class="arrow">
+                →
+            </div>
+
+            <div>
+                🇹🇬<br>
+                Éwé
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="card">
+
+        <h2>🗣️ Voix éwé</h2>
+
+        <select id="voiceType">
+
+            <option value="female-young">
+                👩 Jeune femme
+            </option>
+
+            <option value="female-adult">
+                👩 Femme adulte
+            </option>
+
+            <option value="female-old">
+                👵 Femme âgée
+            </option>
+
+            <option value="male-young">
+                👨 Jeune homme
+            </option>
+
+            <option value="male-adult">
+                👨 Homme adulte
+            </option>
+
+            <option value="male-old">
+                👴 Homme âgé
+            </option>
+
+            <option value="child">
+                👧 Enfant
+            </option>
+
+        </select>
+
+    </section>
+
+
+    <button id="processButton" disabled>
+        🚀 Préparer le doublage éwé
+    </button>
+
+
+    <div id="status" class="status">
+        Sélectionnez une vidéo pour commencer.
+    </div>
+
+</main>
+
+
+<script src="app.js"></script>
+
+</body>
+
+</html>

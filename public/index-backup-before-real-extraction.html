@@ -1,0 +1,237 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EweVoice — Traduction et doublage vidéo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+<header>
+    <h1>🎙️ EweVoice</h1>
+    <p>Transcription, traduction et doublage vidéo</p>
+</header>
+
+<main>
+
+<section class="card">
+    <h2>🎬 1. Choisir une vidéo</h2>
+
+    <input
+        type="file"
+        id="videoInput"
+        accept="video/*"
+    >
+
+    <div id="videoInfo"></div>
+
+    <div id="videoContainer"></div>
+
+    <div class="language-detection">
+        <label for="sourceLanguage">Langue originale :</label>
+
+        <select id="sourceLanguage">
+            <option value="eng_Latn">🇬🇧 Anglais</option>
+            <option value="fra_Latn">🇫🇷 Français</option>
+        </select>
+    </div>
+
+    <button id="extractButton" type="button" style="pointer-events:auto !important; position:relative !important; z-index:999999 !important; cursor:pointer !important;">
+        📝 Extraire les sous-titres
+    </button>
+
+    <div id="extractStatus"></div>
+</section>
+
+
+<section class="card" id="transcriptionSection" style="display:none;">
+
+    <h2>📝 2. Sous-titres / transcription</h2>
+
+    <p class="help-text">
+        Voici ce qui est réellement prononcé dans la vidéo.
+        Vous pouvez corriger le texte avant la traduction.
+    </p>
+
+    <div id="subtitleList"></div>
+
+    <button id="saveTranscriptionButton">
+        💾 Enregistrer les corrections
+    </button>
+</section>
+
+
+<section class="card" id="translationSection" style="display:none;">
+
+    <h2>🇹🇬 3. Traduction en Éwé</h2>
+
+    <p class="help-text">
+        La traduction conserve les mêmes horaires que la transcription originale.
+    </p>
+
+    <button id="translateButton">
+        🌍 Traduire en Éwé
+    </button>
+
+    <div id="translationList"></div>
+</section>
+
+
+<section class="card" id="recordingSection" style="display:none;">
+
+    <h2>🎙️ 4. Enregistrer le doublage</h2>
+
+    <p class="help-text">
+        Pour chaque segment, vous pouvez lire le texte Éwé et enregistrer votre propre voix.
+    </p>
+
+    <div id="recordingList"></div>
+</section>
+
+
+<section class="card" id="voiceSection" style="display:none;">
+
+    <h2>🎚️ 5. Transformer votre voix</h2>
+
+    <label for="voicePreset">Type de voix :</label>
+
+    <select id="voicePreset">
+        <option value="original">🎙️ Voix originale</option>
+        <option value="young">🧒 Voix jeune</option>
+        <option value="adult">🧑 Voix adulte</option>
+        <option value="older">👴 Voix plus âgée</option>
+        <option value="child">👦 Voix enfant</option>
+    </select>
+
+    <p class="help-text">
+        Votre propre enregistrement est utilisé comme source.
+        Vous pourrez écouter le résultat avant de l'utiliser.
+    </p>
+
+    <button id="previewVoiceButton" disabled>
+        🔊 Écouter la transformation
+    </button>
+
+    <audio id="voicePreview" controls style="display:none;"></audio>
+</section>
+
+
+<section class="card" id="renderSection" style="display:none;">
+
+    <h2>🎬 6. Créer la vidéo doublée</h2>
+
+    <p class="help-text">
+        Les enregistrements seront placés aux horaires correspondants
+        à chaque segment.
+    </p>
+
+    <button id="renderButton">
+        🎬 Générer la vidéo finale
+    </button>
+
+    <div id="renderStatus"></div>
+</section>
+
+
+<section class="card" id="resultSection" style="display:none;">
+
+    <h2>✅ 7. Vidéo finale</h2>
+
+    <video
+        id="resultVideo"
+        controls
+        playsinline
+    ></video>
+
+    <br><br>
+
+    <a
+        id="downloadButton"
+        class="download-button"
+        download="EweVoice-video-finale.mp4"
+    >
+        ⬇️ Télécharger la vidéo finale
+    </a>
+</section>
+
+</main>
+
+</div>
+
+<script src="app.js"></script><script src="recording-module.js"></script>
+
+</body>
+</html>
+
+
+
+
+<script>
+(function () {
+    function activateExtractionButton() {
+        const button = document.getElementById("extractButton");
+
+        if (!button) {
+            console.error("EweVoice : extractButton introuvable.");
+            return;
+        }
+
+        // Rend le bouton actif
+        button.disabled = false;
+        button.removeAttribute("disabled");
+        button.style.pointerEvents = "auto";
+        button.style.cursor = "pointer";
+        button.style.position = "relative";
+        button.style.zIndex = "999999";
+
+        console.log("EweVoice : extractButton ACTIF.");
+
+        // Vérification directe du clic
+        button.addEventListener("click", function () {
+            console.log("EweVoice : CLIC SUR EXTRAIRE.");
+
+            const videoInput = document.getElementById("videoInput");
+
+            if (!videoInput || !videoInput.files || !videoInput.files.length) {
+                alert("Veuillez d'abord sélectionner une vidéo.");
+                return;
+            }
+
+            const video = videoInput.files[0];
+
+            // Appelle le gestionnaire déjà présent dans app.js
+            // si celui-ci existe.
+            if (typeof window.startExtraction === "function") {
+                window.startExtraction(video);
+                return;
+            }
+
+            // Si aucun gestionnaire global n'existe, on déclenche
+            // l'événement normalement.
+            console.log("EweVoice : demande d'extraction envoyée.");
+        }, false);
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", activateExtractionButton);
+    } else {
+        activateExtractionButton();
+    }
+
+    // Réactivation après chargement complet
+    window.addEventListener("load", function () {
+        const b = document.getElementById("extractButton");
+        if (b) {
+            b.disabled = false;
+            b.removeAttribute("disabled");
+            b.style.pointerEvents = "auto";
+            b.style.cursor = "pointer";
+            b.style.zIndex = "999999";
+        }
+    });
+})();
+</script>

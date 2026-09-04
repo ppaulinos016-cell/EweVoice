@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EweVoice â€” Traduction et doublage vidÃ©o</title>
+    <title>EweVoice — Traduction et doublage vidéo</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -12,14 +12,14 @@
 <div class="container">
 
 <header>
-    <h1>ðŸŽ™ï¸ EweVoice</h1>
-    <p>Transcription, traduction et doublage vidÃ©o</p>
+    <h1>🎙️ EweVoice</h1>
+    <p>Transcription, traduction et doublage vidéo</p>
 </header>
 
 <main>
 
 <section class="card">
-    <h2>ðŸŽ¬ 1. Choisir une vidÃ©o</h2>
+    <h2>🎬 1. Choisir une vidéo</h2>
 
     <input
         type="file"
@@ -35,13 +35,13 @@
         <label for="sourceLanguage">Langue originale :</label>
 
         <select id="sourceLanguage">
-            <option value="eng_Latn">ðŸ‡¬ðŸ‡§ Anglais</option>
-            <option value="fra_Latn">ðŸ‡«ðŸ‡· FranÃ§ais</option>
+            <option value="eng_Latn">🇬🇧 Anglais</option>
+            <option value="fra_Latn">🇫🇷 Français</option>
         </select>
     </div>
 
     <button id="extractButton" type="button" style="pointer-events:auto !important; position:relative !important; z-index:999999 !important; cursor:pointer !important;">
-        ðŸ“ Extraire les sous-titres
+        📝 Extraire les sous-titres
     </button>
 
     <div id="extractStatus"></div>
@@ -50,30 +50,43 @@
 
 <section class="card" id="transcriptionSection" style="display:none;">
 
-    <h2>ðŸ“ 2. Sous-titres / transcription</h2>
+    <h2>📝 2. Sous-titres / transcription</h2>
 
     <p class="help-text">
-        Voici ce qui est rÃ©ellement prononcÃ© dans la vidÃ©o.
+        Voici ce qui est réellement prononcé dans la vidéo.
         Vous pouvez corriger le texte avant la traduction.
     </p>
 
     <div id="subtitleList"></div>
 
     <button id="saveTranscriptionButton">
-        ðŸ’¾ Enregistrer les corrections
+        💾 Enregistrer les corrections
     </button>
 </section>
 
 
+<section class="card" id="translationSection" style="display:none;">
 
+    <h2>🇹🇬 3. Traduction en Éwé</h2>
+
+    <p class="help-text">
+        La traduction conserve les mêmes horaires que la transcription originale.
+    </p>
+
+    <button id="translateButton">
+        🌍 Traduire en Éwé
+    </button>
+
+    <div id="translationList"></div>
+</section>
 
 
 <section class="card" id="recordingSection" style="display:none;">
 
-    <h2>ðŸŽ™ï¸ 4. Enregistrer le doublage</h2>
+    <h2>🎙️ 4. Enregistrer le doublage</h2>
 
     <p class="help-text">
-        Pour chaque segment, vous pouvez lire le texte Ã‰wÃ© et enregistrer votre propre voix.
+        Pour chaque segment, vous pouvez lire le texte Éwé et enregistrer votre propre voix.
     </p>
 
     <div id="recordingList"></div>
@@ -82,25 +95,25 @@
 
 <section class="card" id="voiceSection" style="display:none;">
 
-    <h2>ðŸŽšï¸ 5. Transformer votre voix</h2>
+    <h2>🎚️ 5. Transformer votre voix</h2>
 
     <label for="voicePreset">Type de voix :</label>
 
     <select id="voicePreset">
-        <option value="original">ðŸŽ™ï¸ Voix originale</option>
-        <option value="young">ðŸ§’ Voix jeune</option>
-        <option value="adult">ðŸ§‘ Voix adulte</option>
-        <option value="older">ðŸ‘´ Voix plus Ã¢gÃ©e</option>
-        <option value="child">ðŸ‘¦ Voix enfant</option>
+        <option value="original">🎙️ Voix originale</option>
+        <option value="young">🧒 Voix jeune</option>
+        <option value="adult">🧑 Voix adulte</option>
+        <option value="older">👴 Voix plus âgée</option>
+        <option value="child">👦 Voix enfant</option>
     </select>
 
     <p class="help-text">
-        Votre propre enregistrement est utilisÃ© comme source.
-        Vous pourrez Ã©couter le rÃ©sultat avant de l'utiliser.
+        Votre propre enregistrement est utilisé comme source.
+        Vous pourrez écouter le résultat avant de l'utiliser.
     </p>
 
     <button id="previewVoiceButton" disabled>
-        ðŸ”Š Ã‰couter la transformation
+        🔊 Écouter la transformation
     </button>
 
     <audio id="voicePreview" controls style="display:none;"></audio>
@@ -109,15 +122,15 @@
 
 <section class="card" id="renderSection" style="display:none;">
 
-    <h2>ðŸŽ¬ 6. CrÃ©er la vidÃ©o doublÃ©e</h2>
+    <h2>🎬 6. Créer la vidéo doublée</h2>
 
     <p class="help-text">
-        Les enregistrements seront placÃ©s aux horaires correspondants
-        Ã  chaque segment.
+        Les enregistrements seront placés aux horaires correspondants
+        à chaque segment.
     </p>
 
     <button id="renderButton">
-        ðŸŽ¬ GÃ©nÃ©rer la vidÃ©o finale
+        🎬 Générer la vidéo finale
     </button>
 
     <div id="renderStatus"></div>
@@ -126,7 +139,7 @@
 
 <section class="card" id="resultSection" style="display:none;">
 
-    <h2>âœ… 7. VidÃ©o finale</h2>
+    <h2>✅ 7. Vidéo finale</h2>
 
     <video
         id="resultVideo"
@@ -141,16 +154,13 @@
         class="download-button"
         download="EweVoice-video-finale.mp4"
     >
-        â¬‡ï¸ TÃ©lÃ©charger la vidÃ©o finale
+        ⬇️ Télécharger la vidéo finale
     </a>
 </section>
 
 </main>
 
 </div>
-
-
-
 
 <script src="app.js"></script><script src="recording-module.js"></script>
 
@@ -161,11 +171,11 @@ document.addEventListener("DOMContentLoaded", function () {
     const videoInput = document.getElementById("videoInput");
 
     if (!button || !videoInput) {
-        console.error("EweVoice : Ã©lÃ©ments d'extraction introuvables.");
+        console.error("EweVoice : éléments d'extraction introuvables.");
         return;
     }
 
-    /* Zone de rÃ©sultat crÃ©Ã©e automatiquement */
+    /* Zone de résultat créée automatiquement */
     let extractionBox = document.getElementById("realExtractionBox");
 
     if (!extractionBox) {
@@ -183,7 +193,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 <h3>Extraction</h3>
 
                 <div id="extractionStatus">
-                    PrÃªt Ã  extraire.
+                    Prêt à extraire.
                 </div>
 
                 <div style="
@@ -248,7 +258,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         if (!list) {
             textResult.innerHTML = `
-                <h3>ðŸ“ Texte extrait de la parole</h3>
+                <h3>📝 Texte extrait de la parole</h3>
                 <div id="realSubtitleList"></div>
             `;
 
@@ -280,7 +290,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             row.innerHTML = `
                 <div style="font-size:13px;color:#666;">
-                    ${start}s â†’ ${end}s
+                    ${start}s → ${end}s
                 </div>
 
                 <div style="
@@ -307,7 +317,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!url) return;
 
         audioResult.innerHTML = `
-            <h3>ðŸ”Š Audio extrait de la vidÃ©o</h3>
+            <h3>🔊 Audio extrait de la vidéo</h3>
 
             <audio
                 id="extractedAudioPlayer"
@@ -348,7 +358,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (Number(job.progress || 0) < 30) {
                     setProgress(
                         25,
-                        "ðŸ”Š Extraction audio terminÃ©e."
+                        "🔊 Extraction audio terminée."
                     );
                 }
             }
@@ -367,7 +377,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     setProgress(
                         p,
-                        "ðŸ“ Transcription en cours : " +
+                        "📝 Transcription en cours : " +
                         job.subtitles.length +
                         " segment(s) extrait(s)."
                     );
@@ -390,7 +400,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 setProgress(
                     100,
-                    "âœ… Extraction terminÃ©e : texte et audio disponibles."
+                    "✅ Extraction terminée : texte et audio disponibles."
                 );
 
                 return;
@@ -417,7 +427,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!file) {
             setProgress(
                 0,
-                "âš ï¸ SÃ©lectionnez d'abord une vidÃ©o."
+                "⚠️ Sélectionnez d'abord une vidéo."
             );
             return;
         }
@@ -426,14 +436,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
         button.disabled = true;
         button.style.pointerEvents = "none";
-        button.textContent = "â³ Extraction en cours...";
+        button.textContent = "⏳ Extraction en cours...";
 
         audioResult.innerHTML = "";
         textResult.innerHTML = "";
 
         setProgress(
             5,
-            "ðŸ“‚ VidÃ©o reÃ§ue. PrÃ©paration de l'extraction..."
+            "📂 Vidéo reçue. Préparation de l'extraction..."
         );
 
         try {
@@ -454,7 +464,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             setProgress(
                 10,
-                "ðŸ”Š Extraction de la piste audio..."
+                "🔊 Extraction de la piste audio..."
             );
 
             const response = await fetch(
@@ -472,14 +482,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 throw new Error(
                     errorText ||
-                    "Le serveur a refusÃ© l'extraction."
+                    "Le serveur a refusé l'extraction."
                 );
             }
 
             const result = await response.json();
 
             console.log(
-                "EweVoice : rÃ©ponse /api/transcribe",
+                "EweVoice : réponse /api/transcribe",
                 result
             );
 
@@ -490,7 +500,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 setProgress(
                     20,
-                    "ðŸ”Š Extraction audio dÃ©marrÃ©e..."
+                    "🔊 Extraction audio démarrée..."
                 );
 
                 await pollExtraction(result.jobId);
@@ -498,8 +508,8 @@ document.addEventListener("DOMContentLoaded", function () {
             } else {
 
                 /*
-                 * CompatibilitÃ© avec un serveur retournant
-                 * directement les rÃ©sultats.
+                 * Compatibilité avec un serveur retournant
+                 * directement les résultats.
                  */
 
                 if (result.audioUrl) {
@@ -512,7 +522,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 setProgress(
                     100,
-                    "âœ… Extraction terminÃ©e."
+                    "✅ Extraction terminée."
                 );
             }
 
@@ -525,7 +535,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             setProgress(
                 0,
-                "âŒ Erreur : " + error.message
+                "❌ Erreur : " + error.message
             );
 
         } finally {
@@ -534,13 +544,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
             button.disabled = false;
             button.style.pointerEvents = "auto";
-            button.textContent = "ðŸ“ Extraire les sous-titres";
+            button.textContent = "📝 Extraire les sous-titres";
         }
     }
 
     /*
-     * Capture le clic avant les anciens handlers Ã©ventuels.
-     * Cela Ã©vite qu'un ancien code bloque l'extraction.
+     * Capture le clic avant les anciens handlers éventuels.
+     * Cela évite qu'un ancien code bloque l'extraction.
      */
     button.addEventListener(
         "click",
@@ -551,7 +561,7 @@ document.addEventListener("DOMContentLoaded", function () {
     button.disabled = false;
 
     console.log(
-        "EweVoice : extraction rÃ©elle connectÃ©e au bouton."
+        "EweVoice : extraction réelle connectée au bouton."
     );
 });
 </script>
@@ -563,7 +573,7 @@ document.addEventListener("DOMContentLoaded", function () {
     background:#fafafa;
 ">
 
-    <h3>ðŸ‡¹ðŸ‡¬ Traduction en Ã‰wÃ©</h3>
+    <h3>🇹🇬 Traduction en Éwé</h3>
 
     <button
         id="translateEweButton"
@@ -578,7 +588,7 @@ document.addEventListener("DOMContentLoaded", function () {
             font-size:16px;
         "
     >
-        ðŸ‡¹ðŸ‡¬ Traduire en Ã‰wÃ©
+        🇹🇬 Traduire en Éwé
     </button>
 
     <div
@@ -589,7 +599,7 @@ document.addEventListener("DOMContentLoaded", function () {
         <div
             id="eweTranslationStatus"
         >
-            PrÃªt.
+            Prêt.
         </div>
 
         <div style="
@@ -639,7 +649,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const percent = document.getElementById("eweTranslationProgressText");
 
         if (!button || !list || !status || !bar || !percent) {
-            console.log("Interface traduction Ã‰wÃ© non trouvÃ©e.");
+            console.log("Interface traduction Éwé non trouvée.");
             return;
         }
 
@@ -688,14 +698,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
             box.innerHTML = `
                 <div style="font-size:13px;color:#666;">
-                    Segment ${segment.id} â€” ${start}s â†’ ${end}s
+                    Segment ${segment.id} — ${start}s → ${end}s
                 </div>
 
                 <div style="
                     margin-top:8px;
                     font-weight:bold;
                 ">
-                    ðŸ‡¹ðŸ‡¬ Traduction Ã‰wÃ©
+                    🇹🇬 Traduction Éwé
                 </div>
 
                 <textarea
@@ -746,7 +756,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 if (!response.ok) {
                     throw new Error(
-                        "Impossible de rÃ©cupÃ©rer la progression."
+                        "Impossible de récupérer la progression."
                     );
                 }
 
@@ -755,8 +765,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 setProgress(
                     job.progress || 0,
                     job.stage === "translation"
-                        ? "ðŸ‡¹ðŸ‡¬ Traduction en Ã‰wÃ© en cours..."
-                        : "PrÃ©paration de la traduction..."
+                        ? "🇹🇬 Traduction en Éwé en cours..."
+                        : "Préparation de la traduction..."
                 );
 
                 if (Array.isArray(job.subtitles)) {
@@ -772,7 +782,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     setProgress(
                         100,
-                        "âœ… Traduction Ã‰wÃ© terminÃ©e."
+                        "✅ Traduction Éwé terminée."
                     );
 
                     return;
@@ -799,7 +809,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 setProgress(
                     0,
-                    "âš ï¸ Aucun texte transcrit. Faites d'abord l'extraction."
+                    "⚠️ Aucun texte transcrit. Faites d'abord l'extraction."
                 );
 
                 return;
@@ -807,13 +817,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
             button.dataset.running = "1";
             button.disabled = true;
-            button.textContent = "â³ Traduction en cours...";
+            button.textContent = "⏳ Traduction en cours...";
 
             list.innerHTML = "";
 
             setProgress(
                 5,
-                "PrÃ©paration de la traduction..."
+                "Préparation de la traduction..."
             );
 
             try {
@@ -856,7 +866,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     throw new Error(
                         result.error ||
-                        "Job de traduction non crÃ©Ã©."
+                        "Job de traduction non créé."
                     );
                 }
 
@@ -868,14 +878,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 setProgress(
                     0,
-                    "âŒ " + error.message
+                    "❌ " + error.message
                 );
 
             } finally {
 
                 button.dataset.running = "0";
                 button.disabled = false;
-                button.textContent = "ðŸ‡¹ðŸ‡¬ Traduire en Ã‰wÃ©";
+                button.textContent = "🇹🇬 Traduire en Éwé";
             }
 
         }, true);
@@ -941,15 +951,15 @@ document.addEventListener("DOMContentLoaded", function () {
 </style>
 
 <section id="eweAudioTranslationBox">
-    <h2>ðŸ‡¹ðŸ‡¬ Traduction audio en Ã‰wÃ©</h2>
+    <h2>🇹🇬 Traduction audio en Éwé</h2>
 
     <p>
-        La parole originale est traduite en Ã‰wÃ© puis transformÃ©e
-        en audio synchronisÃ© avec la vidÃ©o.
+        La parole originale est traduite en Éwé puis transformée
+        en audio synchronisé avec la vidéo.
     </p>
 
     <button id="eweAudioTranslateButton" type="button">
-        ðŸ‡¹ðŸ‡¬ Traduire la parole en Ã‰wÃ©
+        🇹🇬 Traduire la parole en Éwé
     </button>
 
     <div id="eweAudioProgressContainer">
@@ -999,7 +1009,7 @@ document.addEventListener("DOMContentLoaded", function () {
         player.style.display = "none";
         player.removeAttribute("src");
 
-        showProgress(5, "PrÃ©paration de la traduction Ã‰wÃ©...");
+        showProgress(5, "Préparation de la traduction Éwé...");
 
         try {
             const response = await fetch("/api/translate-audio", {
@@ -1014,14 +1024,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
             if (!response.ok || !data.success) {
                 throw new Error(
-                    data.error || "Impossible de dÃ©marrer la traduction."
+                    data.error || "Impossible de démarrer la traduction."
                 );
             }
 
             pollTranslation(data.jobId);
 
         } catch (error) {
-            showProgress(0, "âš ï¸ " + error.message);
+            showProgress(0, "⚠️ " + error.message);
             button.disabled = false;
         }
     }
@@ -1041,18 +1051,18 @@ document.addEventListener("DOMContentLoaded", function () {
                     );
                 }
 
-                let message = "Traitement audio Ã‰wÃ©...";
+                let message = "Traitement audio Éwé...";
 
                 if (data.stage === "translation") {
-                    message = "ðŸ‡¹ðŸ‡¬ Traduction de la parole en Ã‰wÃ©...";
+                    message = "🇹🇬 Traduction de la parole en Éwé...";
                 }
 
                 if (data.stage === "tts") {
-                    message = "ðŸ”Š GÃ©nÃ©ration de la voix Ã‰wÃ© synchronisÃ©e...";
+                    message = "🔊 Génération de la voix Éwé synchronisée...";
                 }
 
                 if (data.stage === "complete") {
-                    message = "âœ… Audio Ã‰wÃ© terminÃ©.";
+                    message = "✅ Audio Éwé terminé.";
                 }
 
                 showProgress(data.progress, message);
@@ -1071,7 +1081,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     showProgress(
                         100,
-                        "âœ… Traduction audio Ã‰wÃ© terminÃ©e. Vous pouvez Ã©couter le rÃ©sultat."
+                        "✅ Traduction audio Éwé terminée. Vous pouvez écouter le résultat."
                     );
 
                     button.disabled = false;
@@ -1084,7 +1094,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     throw new Error(
                         data.error ||
-                        "La gÃ©nÃ©ration de l'audio Ã‰wÃ© a Ã©chouÃ©."
+                        "La génération de l'audio Éwé a échoué."
                     );
                 }
 
@@ -1092,7 +1102,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 clearInterval(polling);
                 polling = null;
 
-                showProgress(0, "âš ï¸ " + error.message);
+                showProgress(0, "⚠️ " + error.message);
                 button.disabled = false;
             }
         }, 1000);
@@ -1102,667 +1112,6 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 </script>
 
-
-
-<section class="card" id="applyEweVideoBox">
-    <h2>ðŸŽ¬ Appliquer l'audio Ã‰wÃ© Ã  la vidÃ©o</h2>
-
-    <p class="help-text">
-        Remplace la parole originale par l'audio Ã‰wÃ© synchronisÃ© avec la vidÃ©o.
-    </p>
-
-    <button id="applyEweVideoButton" type="button">
-        ðŸŽ¬ Appliquer l'audio Ã‰wÃ©
-    </button>
-
-    <div id="applyEweVideoProgressBox" style="display:none; margin-top:15px;">
-        <div style="font-weight:600; margin-bottom:8px;">
-            <span id="applyEweVideoProgressText">PrÃ©paration...</span>
-        </div>
-
-        <div style="
-            width:100%;
-            height:10px;
-            background:#e5e7eb;
-            border-radius:999px;
-            overflow:hidden;
-        ">
-            <div id="applyEweVideoProgressBar" style="
-                width:0%;
-                height:100%;
-                transition:width .3s ease;
-            "></div>
-        </div>
-
-        <div id="applyEweVideoPercent" style="
-            margin-top:8px;
-            font-weight:700;
-        ">0 %</div>
-    </div>
-
-    <div id="applyEweVideoStatus" style="margin-top:15px;"></div>
-
-    <div id="finalEweVideoBox" style="display:none; margin-top:20px;">
-        <h3>ðŸŽ¥ VidÃ©o finale en Ã‰wÃ©</h3>
-
-        <video
-            id="finalEweVideo"
-            controls
-            playsinline
-            style="
-                width:100%;
-                max-width:900px;
-                border-radius:12px;
-                display:block;
-            "
-        ></video>
-
-        <a
-            id="downloadFinalEweVideo"
-            href="#"
-            download
-            style="
-                display:inline-block;
-                margin-top:15px;
-                padding:10px 16px;
-                border-radius:8px;
-                text-decoration:none;
-            "
-        >
-            â¬‡ï¸ TÃ©lÃ©charger la vidÃ©o finale
-        </a>
-    </div>
-</section>
-
-
-<div class="card" id="audioSelectionBox">
-    <h2>ðŸŽµ SÃ©lectionner un audio</h2>
-
-    <p class="help-text">
-        SÃ©lectionnez un fichier audio Ã  traduire.
-    </p>
-
-    <input
-        type="file"
-        id="audioFileInput"
-        accept="audio/*"
-    >
-
-    <div id="selectedAudioInfo" style="margin-top:12px;"></div>
-
-    <audio
-        id="selectedAudioPreview"
-        controls
-        style="display:none; width:100%; margin-top:15px;"
-    ></audio>
-</div>
-
-
-
-<div id="audioTranscriptionArea" style="margin-top:20px;">
-
-    <label for="audioSourceLanguage">
-        ðŸŒ Langue de l'audio
-    </label>
-
-    <select id="audioSourceLanguage">
-        <option value="eng_Latn">ðŸ‡¬ðŸ‡§ Anglais</option>
-        <option value="fra_Latn">ðŸ‡«ðŸ‡· FranÃ§ais</option>
-    </select>
-
-    <button
-        id="audioTranscriptionButton"
-        type="button"
-        style="margin-top:12px;"
-    >
-        ðŸ“ Transcrire l'audio
-    </button>
-
-    <div
-        id="audioTranscriptionProgress"
-        style="margin-top:12px;"
-    >
-        0 %
-    </div>
-
-    <div
-        id="audioTranscriptionStatus"
-        style="margin-top:8px;"
-    ></div>
-
-    <div
-        id="audioTranscriptionList"
-        style="margin-top:15px;"
-    ></div>
-
-</div>
-
-<script>
-(function () {
-
-    const input = document.getElementById("audioFileInput");
-    const preview = document.getElementById("selectedAudioPreview");
-    const info = document.getElementById("selectedAudioInfo");
-    const button = document.getElementById("audioTranscriptionButton");
-
-    if (!input || !button) return;
-
-    input.addEventListener("change", function () {
-
-        const file = input.files[0];
-
-        if (!file) return;
-
-        preview.src = URL.createObjectURL(file);
-        preview.style.display = "block";
-
-        info.textContent =
-            "ðŸŽµ Audio sÃ©lectionnÃ© : " +
-            file.name;
-
-    });
-
-    button.addEventListener("click", async function () {
-
-        const file = input.files[0];
-
-        if (!file) {
-            alert("SÃ©lectionnez d'abord un fichier audio.");
-            return;
-        }
-
-        const language =
-            document.getElementById("audioSourceLanguage").value;
-
-        const progress =
-            document.getElementById("audioTranscriptionProgress");
-
-        const status =
-            document.getElementById("audioTranscriptionStatus");
-
-        const list =
-            document.getElementById("audioTranscriptionList");
-
-        button.disabled = true;
-        progress.textContent = "10 %";
-        status.textContent = "ðŸŽµ PrÃ©paration de l'audio...";
-        list.innerHTML = "";
-
-        try {
-
-            const formData = new FormData();
-
-            formData.append("video", file);
-            formData.append("language", language);
-            formData.append("sourceType", "audio");
-
-            const response = await fetch(
-                "/api/transcribe",
-                {
-                    method: "POST",
-                    body: formData
-                }
-            );
-
-            const data = await response.json();
-
-            if (!response.ok || !data.success) {
-                throw new Error(
-                    data.error ||
-                    "Erreur lors de l'envoi de l'audio."
-                );
-            }
-
-            window.audioOnlyTranscriptionJobId =
-                data.jobId;
-
-            status.textContent =
-                "ðŸ“ Transcription en cours...";
-
-            const jobId = data.jobId;
-
-            async function poll() {
-
-                const r = await fetch(
-                    "/api/transcribe/" +
-                    encodeURIComponent(jobId)
-                );
-
-                const job = await r.json();
-
-                progress.textContent =
-                    (job.progress || 0) + " %";
-
-                if (
-                    Array.isArray(job.subtitles) &&
-                    job.subtitles.length
-                ) {
-
-                    list.innerHTML =
-                        job.subtitles.map(function (seg) {
-
-                            return `
-                                <div style="
-                                    padding:10px;
-                                    margin-bottom:8px;
-                                    border-radius:8px;
-                                    background:#f3f4f6;
-                                ">
-                                    <strong>
-                                        ${seg.start} â†’ ${seg.end}
-                                    </strong>
-                                    <br>
-                                    ${seg.text}
-                                </div>
-                            `;
-
-                        }).join("");
-                }
-
-                if (job.status === "complete") {
-
-                    progress.textContent = "100 %";
-
-                    status.textContent =
-                        "âœ… Transcription audio terminÃ©e.";
-
-                    button.disabled = false;
-                    return;
-                }
-
-                if (job.status === "error") {
-
-                    throw new Error(
-                        job.error ||
-                        "Erreur pendant la transcription."
-                    );
-                }
-
-                setTimeout(poll, 1000);
-            }
-
-            poll();
-
-        } catch (error) {
-
-            console.error(error);
-
-            status.textContent =
-                "âŒ " + error.message;
-
-            button.disabled = false;
-        }
-
-    });
-
-})();
-</script>
-
-
-
-<section class="card" id="audioOnlyEweTranslationBox">
-<div id="eweVoiceSelection" style="margin-top:18px;">
-    <label for="eweVoiceSelect" style="font-weight:600; display:block; margin-bottom:8px;">
-        ðŸŽ™ï¸ Voix utilisÃ©e
-    </label>
-
-    <select id="eweVoiceSelect" style="width:100%; padding:10px; border-radius:8px;">
-        <option value="current">ðŸŽ™ï¸ Voix Ã‰wÃ© actuelle</option>
-        <option value="male">ðŸ‘¨ Voix masculine</option>
-        <option value="female">ðŸ‘© Voix fÃ©minine</option>
-        <option value="young">ðŸ§‘ Voix jeune</option>
-        <option value="my-voice">ðŸŽ¤ Ma propre voix</option>
-    </select>
-
-    <div id="myVoiceBox" style="display:none; margin-top:15px;">
-        <p class="help-text">
-            Enregistrez seulement quelques secondes de votre voix.
-            Cet Ã©chantillon servira de rÃ©fÃ©rence pour la gÃ©nÃ©ration de la voix Ã‰wÃ©.
-        </p>
-
-        <button id="recordMyVoiceButton" type="button">
-            ðŸ”´ Enregistrer ma voix
-        </button>
-
-        <button id="stopMyVoiceButton" type="button" disabled>
-            â¹ ArrÃªter
-        </button>
-
-        <audio id="myVoicePreview" controls style="display:none; width:100%; margin-top:12px;"></audio>
-
-        <div id="myVoiceStatus" style="margin-top:10px;"></div>
-    </div>
-</div>
-
-    <h2>ðŸ‡¹ðŸ‡¬ Traduction audio en Ã‰wÃ©</h2>
-
-    <p class="help-text">
-        L'audio sÃ©lectionnÃ© est traduit en Ã‰wÃ© puis transformÃ© en audio synchronisÃ©.
-    </p>
-
-    <button
-        id="audioOnlyEweTranslateButton"
-        type="button"
-    >
-        ðŸ‡¹ðŸ‡¬ Traduire l'audio en Ã‰wÃ©
-    </button>
-
-    <div
-        id="audioOnlyEweProgress"
-        style="margin-top:12px;"
-    >
-        0 %
-    </div>
-
-    <div
-        id="audioOnlyEweStatus"
-        style="margin-top:8px;"
-    ></div>
-
-    <audio
-        id="audioOnlyEwePlayer"
-        controls
-        style="
-            display:none;
-            width:100%;
-            margin-top:15px;
-        "
-    ></audio>
-
-    <br>
-
-    <a
-        id="downloadAudioOnlyEwe"
-        href="#"
-        download
-        style="
-            display:none;
-            margin-top:15px;
-        "
-    >
-        â¬‡ï¸ TÃ©lÃ©charger l'audio Ã‰wÃ©
-    </a>
-
-</section>
-
-<script>
-(function () {
-
-    const button =
-        document.getElementById(
-            "audioOnlyEweTranslateButton"
-        );
-
-    if (!button) return;
-
-    button.addEventListener("click", async function () {
-
-        const transcriptionJobId =
-            window.audioOnlyTranscriptionJobId;
-
-        const progress =
-            document.getElementById(
-                "audioOnlyEweProgress"
-            );
-
-        const status =
-            document.getElementById(
-                "audioOnlyEweStatus"
-            );
-
-        const player =
-            document.getElementById(
-                "audioOnlyEwePlayer"
-            );
-
-        const download =
-            document.getElementById(
-                "downloadAudioOnlyEwe"
-            );
-
-        if (!transcriptionJobId) {
-
-            status.textContent =
-                "âŒ Transcrivez d'abord l'audio.";
-
-            return;
-        }
-
-        button.disabled = true;
-        progress.textContent = "5 %";
-        status.textContent =
-            "ðŸ‡¹ðŸ‡¬ Traduction de la parole en Ã‰wÃ©...";
-
-        try {
-
-            const voiceSelect =
-                document.getElementById("eweVoiceSelect");
-
-            const voicePreset =
-                voiceSelect?.value || "current";
-
-            const formData = new FormData();
-
-            formData.append(
-                "transcriptionJobId",
-                transcriptionJobId
-            );
-
-            formData.append(
-                "voicePreset",
-                voicePreset
-            );
-
-            if (
-                voicePreset === "my-voice" &&
-                window.myVoiceReferenceBlob
-            ) {
-                formData.append(
-                    "voice",
-                    window.myVoiceReferenceBlob,
-                    "my-voice-reference.webm"
-                );
-            }
-
-            const response = await fetch(
-                "/api/translate-audio",
-                {
-                    method: "POST",
-                    body: formData
-                }
-            );
-
-            const data =
-                await response.json();
-
-            if (!response.ok || !data.success) {
-
-                throw new Error(
-                    data.error ||
-                    "Impossible de traduire l'audio."
-                );
-            }
-
-            const jobId = data.jobId;
-
-            window.audioOnlyEweJobId =
-                jobId;
-
-            async function poll() {
-
-                const r = await fetch(
-                    "/api/translate-audio/" +
-                    encodeURIComponent(jobId)
-                );
-
-                const job =
-                    await r.json();
-
-                progress.textContent =
-                    (job.progress || 0) + " %";
-
-                if (job.stage === "translation") {
-
-                    status.textContent =
-                        "ðŸŒ Traduction en Ã‰wÃ©...";
-                }
-
-                if (
-                    job.stage === "dubbing" ||
-                    job.stage === "generating_audio"
-                ) {
-
-                    status.textContent =
-                        "ðŸ”Š GÃ©nÃ©ration de l'audio Ã‰wÃ©...";
-                }
-
-                if (
-                    job.status === "complete" &&
-                    job.audioUrl
-                ) {
-
-                    progress.textContent =
-                        "100 %";
-
-                    player.src =
-                        job.audioUrl +
-                        "?t=" +
-                        Date.now();
-
-                    player.style.display =
-                        "block";
-
-                    download.href =
-                        job.audioUrl;
-
-                    download.style.display =
-                        "inline-block";
-
-                    status.textContent =
-                        "âœ… Audio Ã‰wÃ© terminÃ©.";
-
-                    button.disabled = false;
-
-                    return;
-                }
-
-                if (job.status === "error") {
-
-                    throw new Error(
-                        job.error ||
-                        "Erreur pendant la traduction audio."
-                    );
-                }
-
-                setTimeout(poll, 1000);
-            }
-
-            poll();
-
-        } catch (error) {
-
-            console.error(error);
-
-            status.textContent =
-                "âŒ " + error.message;
-
-            button.disabled = false;
-        }
-
-    });
-
-})();
-</script>
-
-
-<script>
-// MY_VOICE_RECORDER_INSTALLED
-(function () {
-    const select = document.getElementById("eweVoiceSelect");
-    const box = document.getElementById("myVoiceBox");
-    const recordButton = document.getElementById("recordMyVoiceButton");
-    const stopButton = document.getElementById("stopMyVoiceButton");
-    const preview = document.getElementById("myVoicePreview");
-    const status = document.getElementById("myVoiceStatus");
-
-    if (!select || !box || !recordButton || !stopButton) return;
-
-    let recorder = null;
-    let chunks = [];
-    let stream = null;
-
-    select.addEventListener("change", function () {
-        if (select.value === "my-voice") {
-            box.style.display = "block";
-            status.textContent = "ðŸŽ¤ PrÃªt Ã  enregistrer votre voix.";
-        } else {
-            box.style.display = "none";
-        }
-    });
-
-    recordButton.addEventListener("click", async function () {
-        try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                audio: true
-            });
-
-            chunks = [];
-
-            recorder = new MediaRecorder(stream);
-
-            recorder.ondataavailable = function (event) {
-                if (event.data && event.data.size > 0) {
-                    chunks.push(event.data);
-                }
-            };
-
-            recorder.onstop = function () {
-                const blob = new Blob(chunks, {
-                    type: recorder.mimeType || "audio/webm"
-                });
-
-                const url = URL.createObjectURL(blob);
-
-                preview.src = url;
-                preview.style.display = "block";
-
-                window.myVoiceReferenceBlob = blob;
-
-                status.textContent =
-                    "âœ… Ã‰chantillon vocal enregistrÃ©. Vous pouvez l'Ã©couter.";
-
-                if (stream) {
-                    stream.getTracks().forEach(track => track.stop());
-                    stream = null;
-                }
-            };
-
-            recorder.start();
-
-            recordButton.disabled = true;
-            stopButton.disabled = false;
-
-            status.textContent =
-                "ðŸ”´ Enregistrement en cours... Parlez naturellement pendant quelques secondes.";
-
-        } catch (error) {
-            console.error(error);
-
-            status.textContent =
-                "âŒ Impossible d'accÃ©der au microphone. VÃ©rifiez l'autorisation du navigateur.";
-        }
-    });
-
-    stopButton.addEventListener("click", function () {
-        if (!recorder || recorder.state === "inactive") return;
-
-        recorder.stop();
-
-        recordButton.disabled = false;
-        stopButton.disabled = true;
-    });
-})();
-</script>
 </body>
 </html>
 
@@ -1789,29 +1138,29 @@ document.addEventListener("DOMContentLoaded", function () {
 
         console.log("EweVoice : extractButton ACTIF.");
 
-        // VÃ©rification directe du clic
+        // Vérification directe du clic
         button.addEventListener("click", function () {
             console.log("EweVoice : CLIC SUR EXTRAIRE.");
 
             const videoInput = document.getElementById("videoInput");
 
             if (!videoInput || !videoInput.files || !videoInput.files.length) {
-                alert("Veuillez d'abord sÃ©lectionner une vidÃ©o.");
+                alert("Veuillez d'abord sélectionner une vidéo.");
                 return;
             }
 
             const video = videoInput.files[0];
 
-            // Appelle le gestionnaire dÃ©jÃ  prÃ©sent dans app.js
+            // Appelle le gestionnaire déjà présent dans app.js
             // si celui-ci existe.
             if (typeof window.startExtraction === "function") {
                 window.startExtraction(video);
                 return;
             }
 
-            // Si aucun gestionnaire global n'existe, on dÃ©clenche
-            // l'Ã©vÃ©nement normalement.
-            console.log("EweVoice : demande d'extraction envoyÃ©e.");
+            // Si aucun gestionnaire global n'existe, on déclenche
+            // l'événement normalement.
+            console.log("EweVoice : demande d'extraction envoyée.");
         }, false);
     }
 
@@ -1821,7 +1170,7 @@ document.addEventListener("DOMContentLoaded", function () {
         activateExtractionButton();
     }
 
-    // RÃ©activation aprÃ¨s chargement complet
+    // Réactivation après chargement complet
     window.addEventListener("load", function () {
         const b = document.getElementById("extractButton");
         if (b) {
@@ -1834,8 +1183,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 })();
 </script>
-
-
 
 
 

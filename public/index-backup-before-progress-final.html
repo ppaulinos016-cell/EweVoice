@@ -1,0 +1,136 @@
+﻿<!DOCTYPE html>
+
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EweVoice — Traduction vidéo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+```
+<header>
+    <h1>🎙️ EweVoice</h1>
+    <p>Traduction et doublage vidéo automatique</p>
+</header>
+
+<main>
+
+    <section class="card">
+
+        <h2>🎬 Choisir une vidéo</h2>
+
+        <input
+            type="file"
+            id="videoInput"
+            accept="video/*"
+        >
+
+        <div id="videoInfo"></div>
+
+        <div id="videoContainer"></div>
+
+    </section>
+
+
+    <section class="card">
+
+        <h2>🌍 Langue de traduction</h2>
+
+        <select id="targetLanguage">
+
+            <option value="ewe">🇹🇬 Éwé</option>
+
+            <option value="fr">🇫🇷 Français</option>
+
+        </select>
+
+    </section>
+
+
+    <section class="card">
+
+        <h2>🎙️ Type de voix</h2>
+
+        <select id="voiceType">
+
+            <option value="female">
+                👩 Femme adulte
+            </option>
+
+            <option value="male">
+                👨 Homme adulte
+            </option>
+
+            <option value="young-female">
+                👧 Jeune fille
+            </option>
+
+            <option value="young-male">
+                👦 Jeune homme
+            </option>
+
+            <option value="adult">
+                🧑 Adulte
+            </option>
+
+        </select>
+
+    </section>
+
+
+    <section class="card">
+
+        <button
+            id="processButton"
+            disabled
+        >
+            🚀 Traduire et doubler la vidéo
+        </button>
+
+        <div id="status">
+            Sélectionnez une vidéo pour commencer.
+        </div>
+
+    </section>
+
+
+    <section
+        class="card"
+        id="resultSection"
+        style="display:none;"
+    >
+
+        <h2>✅ Vidéo terminée</h2>
+
+        <video
+            id="resultVideo"
+            controls
+            playsinline
+        ></video>
+
+        <br><br>
+
+        <a
+            id="downloadButton"
+            class="download-button"
+            download
+        >
+            ⬇️ Télécharger la vidéo traduite
+        </a>
+
+    </section>
+
+</main>
+```
+
+</div>
+
+<script src="app.js"></script>
+
+</body>
+</html>

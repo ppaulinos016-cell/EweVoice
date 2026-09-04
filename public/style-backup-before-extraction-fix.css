@@ -330,31 +330,3 @@ button:disabled {
         width: 100%;
     }
 }
-
-#extractButton {
-    pointer-events: auto !important;
-    position: relative !important;
-    z-index: 99999 !important;
-    cursor: pointer !important;
-}
-
-/* ===== FIX DEFINITIF BOUTON EXTRACTION ===== */
-
-#extractButton,
-button#extractButton {
-    display: inline-block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    position: relative !important;
-    z-index: 999999 !important;
-    cursor: pointer !important;
-}
-
-#extractButton:disabled,
-button#extractButton:disabled {
-    pointer-events: auto !important;
-    cursor: pointer !important;
-    opacity: 1 !important;
-}
-
